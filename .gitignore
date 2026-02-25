@@ -9,6 +9,8 @@ target/
 .orchestrator-project-id
 .mcp.json
 TODO.md
+CLAUDE.md
+.worktrees
 
 ### STS ###
 .apt_generated
