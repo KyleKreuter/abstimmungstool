@@ -49,7 +49,7 @@ public class PollController {
     @PostMapping("/groups/{groupId}/polls")
     public ResponseEntity<PollResponse> createPoll(@PathVariable Long groupId,
                                                    @RequestBody CreatePollRequest request) {
-        Poll poll = pollService.createPoll(groupId, HtmlUtils.htmlEscape(request.title()), HtmlUtils.htmlEscape(request.description()));
+        Poll poll = pollService.createPoll(groupId, request.title(), request.description());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(poll));
     }
 
@@ -59,7 +59,7 @@ public class PollController {
     @PutMapping("/polls/{id}")
     public ResponseEntity<PollResponse> updatePoll(@PathVariable Long id,
                                                    @RequestBody UpdatePollRequest request) {
-        Poll poll = pollService.updatePoll(id, HtmlUtils.htmlEscape(request.title()), HtmlUtils.htmlEscape(request.description()));
+        Poll poll = pollService.updatePoll(id, request.title(), request.description());
         return ResponseEntity.ok(toResponse(poll));
     }
 
@@ -80,7 +80,7 @@ public class PollController {
     @PutMapping("/polls/{id}/notes")
     public ResponseEntity<PollResponse> updateNotes(@PathVariable Long id,
                                                     @RequestBody UpdateNotesRequest request) {
-        Poll poll = pollService.updateNotes(id, HtmlUtils.htmlEscape(request.notes()));
+        Poll poll = pollService.updateNotes(id, request.notes());
         return ResponseEntity.ok(toResponse(poll));
     }
 
@@ -97,14 +97,14 @@ public class PollController {
     }
 
     /**
-     * Returns a single poll with detailed information including results if PUBLISHED.
+     * Returns a single poll with detailed information including results for OPEN, CLOSED and PUBLISHED polls.
      */
     @GetMapping("/polls/{id}")
     public ResponseEntity<PollDetailResponse> getPoll(@PathVariable Long id) {
         Poll poll = pollService.getPollById(id);
         PollResultResponse results = null;
 
-        if (poll.getStatus() == PollStatus.PUBLISHED) {
+        if (poll.getStatus() != PollStatus.DRAFT) {
             Map<VoteOption, Long> voteCounts = voteService.countVotes(id);
             long yesCount = voteCounts.getOrDefault(VoteOption.YES, 0L);
             long noCount = voteCounts.getOrDefault(VoteOption.NO, 0L);

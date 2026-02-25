@@ -3,7 +3,9 @@ package de.kyle.abstimmungstool.service;
 import de.kyle.abstimmungstool.entity.PollGroup;
 import de.kyle.abstimmungstool.repository.PollGroupRepository;
 import de.kyle.abstimmungstool.repository.PollRepository;
+import de.kyle.abstimmungstool.repository.VoteRepository;
 import de.kyle.abstimmungstool.repository.VotingCodeRepository;
+import de.kyle.abstimmungstool.exception.DuplicateException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,13 +22,16 @@ public class PollGroupService {
 
     private final PollGroupRepository pollGroupRepository;
     private final PollRepository pollRepository;
+    private final VoteRepository voteRepository;
     private final VotingCodeRepository votingCodeRepository;
 
     public PollGroupService(PollGroupRepository pollGroupRepository,
                             PollRepository pollRepository,
+                            VoteRepository voteRepository,
                             VotingCodeRepository votingCodeRepository) {
         this.pollGroupRepository = pollGroupRepository;
         this.pollRepository = pollRepository;
+        this.voteRepository = voteRepository;
         this.votingCodeRepository = votingCodeRepository;
     }
 
@@ -37,6 +42,10 @@ public class PollGroupService {
      * @return the created poll group
      */
     public PollGroup createGroup(String name) {
+        if (pollGroupRepository.existsByNameIgnoreCase(name)) {
+            throw new DuplicateException("Eine Gruppe mit dem Namen \"" + name + "\" existiert bereits.");
+        }
+
         PollGroup group = new PollGroup();
         group.setName(name);
         group.setCreatedAt(LocalDateTime.now());
@@ -58,25 +67,25 @@ public class PollGroupService {
     }
 
     /**
-     * Deletes a poll group. Only allowed if no polls and no voting codes are assigned.
+     * Deletes a poll group and all associated data (votes, polls, voting codes).
      *
      * @param id the group ID
      * @throws EntityNotFoundException if the group does not exist
-     * @throws IllegalStateException   if the group still has polls or voting codes
      */
     public void deleteGroup(Long id) {
         PollGroup group = getGroupById(id);
 
-        long pollCount = pollRepository.findByGroup(group).size();
-        if (pollCount > 0) {
-            throw new IllegalStateException("Cannot delete group: it still has " + pollCount + " poll(s) assigned.");
+        // Delete votes first (they reference polls and voting codes)
+        var polls = pollRepository.findByGroup(group);
+        if (!polls.isEmpty()) {
+            voteRepository.deleteByPollIn(polls);
         }
 
-        long codeCount = votingCodeRepository.countByGroup(group);
-        if (codeCount > 0) {
-            throw new IllegalStateException("Cannot delete group: it still has " + codeCount + " voting code(s) assigned.");
-        }
+        // Delete polls and voting codes
+        pollRepository.deleteByGroup(group);
+        votingCodeRepository.deleteByGroup(group);
 
+        // Delete the group itself
         pollGroupRepository.delete(group);
     }
 

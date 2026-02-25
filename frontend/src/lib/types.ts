@@ -61,8 +61,8 @@ export interface PollDetailResponse extends PollResponse {
 /** Vote option enum */
 export type VoteOption = "YES" | "NO" | "ABSTAIN";
 
-/** Participant-facing poll status (only OPEN or PUBLISHED) */
-export type ParticipantPollStatus = "OPEN" | "PUBLISHED";
+/** Participant-facing poll status */
+export type ParticipantPollStatus = "OPEN" | "CLOSED" | "PUBLISHED";
 
 /** Response for a poll as seen by a participant */
 export interface ParticipantPollResponse {
@@ -104,13 +104,13 @@ export interface PollStatusEvent {
   status: PollStatus;
 }
 
-/** WebSocket event for vote updates */
+/** WebSocket event for vote updates (backend sends per-option breakdown) */
 export interface PollVoteEvent {
   pollId: number;
+  totalVotes: number;
   yesCount: number;
   noCount: number;
   abstainCount: number;
-  totalCount: number;
 }
 
 /** WebSocket event for result publication */

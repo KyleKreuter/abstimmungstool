@@ -45,7 +45,7 @@ public class PollGroupController {
      */
     @PostMapping
     public ResponseEntity<PollGroupResponse> createGroup(@RequestBody CreateGroupRequest request) {
-        PollGroup group = pollGroupService.createGroup(HtmlUtils.htmlEscape(request.name()));
+        PollGroup group = pollGroupService.createGroup(request.name());
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(group));
     }
 
@@ -75,7 +75,7 @@ public class PollGroupController {
     @PutMapping("/{id}")
     public ResponseEntity<PollGroupResponse> updateGroup(@PathVariable Long id,
                                                          @RequestBody UpdateGroupRequest request) {
-        PollGroup group = pollGroupService.renameGroup(id, HtmlUtils.htmlEscape(request.name()));
+        PollGroup group = pollGroupService.renameGroup(id, request.name());
         return ResponseEntity.ok(toResponse(group));
     }
 

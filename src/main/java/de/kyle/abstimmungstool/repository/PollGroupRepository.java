@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface PollGroupRepository extends JpaRepository<PollGroup, Long> {
+    boolean existsByNameIgnoreCase(String name);
 }

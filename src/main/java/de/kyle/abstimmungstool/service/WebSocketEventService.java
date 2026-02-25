@@ -36,15 +36,23 @@ public class WebSocketEventService {
     }
 
     /**
-     * Broadcasts the total vote count for a poll (without per-option breakdown).
+     * Broadcasts the vote counts for a poll including per-option breakdown.
      *
-     * @param pollId     the poll ID
-     * @param totalCount the total number of votes
+     * @param pollId       the poll ID
+     * @param totalCount   the total number of votes
+     * @param yesCount     number of YES votes
+     * @param noCount      number of NO votes
+     * @param abstainCount number of ABSTAIN votes
      */
-    public void broadcastVoteCount(Long pollId, long totalCount) {
+    public void broadcastVoteCount(Long pollId, long totalCount,
+                                    long yesCount, long noCount, long abstainCount) {
         log.info("Broadcasting vote count: pollId={}, totalCount={}", pollId, totalCount);
         messagingTemplate.convertAndSend("/topic/poll/" + pollId + "/votes",
-                Map.of("pollId", pollId, "totalVotes", totalCount));
+                Map.of("pollId", pollId,
+                       "totalVotes", totalCount,
+                       "yesCount", yesCount,
+                       "noCount", noCount,
+                       "abstainCount", abstainCount));
     }
 
     /**

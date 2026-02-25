@@ -167,7 +167,7 @@ public class PollService {
      */
     @Transactional(readOnly = true)
     public List<Poll> getPollsForParticipant(PollGroup group) {
-        return pollRepository.findByGroupAndStatusIn(group, List.of(PollStatus.OPEN, PollStatus.PUBLISHED));
+        return pollRepository.findByGroupAndStatusIn(group, List.of(PollStatus.OPEN, PollStatus.CLOSED, PollStatus.PUBLISHED));
     }
 
     /**

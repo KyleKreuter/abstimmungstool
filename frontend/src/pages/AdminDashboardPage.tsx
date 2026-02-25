@@ -25,7 +25,6 @@ import {
   deleteGroup,
   createPoll,
 } from "@/lib/admin-api";
-import { ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import type { PollGroupResponse, PollResponse } from "@/lib/types";
 
@@ -73,22 +72,34 @@ export default function AdminDashboardPage() {
 
   const handleCreateGroup = useCallback(
     async (name: string) => {
+      const existing = groups?.find(
+        (g) => g.name.toLowerCase() === name.toLowerCase()
+      );
+      if (existing) {
+        throw new Error("Eine Gruppe mit diesem Namen existiert bereits.");
+      }
       await createGroup(name);
       refetchGroups();
       toast.success("Gruppe erstellt");
     },
-    [refetchGroups]
+    [refetchGroups, groups]
   );
 
   const handleUpdateGroup = useCallback(
     async (name: string) => {
       if (!editingGroup) return;
+      const existing = groups?.find(
+        (g) => g.name.toLowerCase() === name.toLowerCase() && g.id !== editingGroup.id
+      );
+      if (existing) {
+        throw new Error("Eine Gruppe mit diesem Namen existiert bereits.");
+      }
       await updateGroup(editingGroup.id, name);
       refetchGroups();
       refetchPolls();
       toast.success("Gruppe umbenannt");
     },
-    [editingGroup, refetchGroups, refetchPolls]
+    [editingGroup, refetchGroups, refetchPolls, groups]
   );
 
   function openEditGroup(group: PollGroupResponse) {
@@ -104,17 +115,12 @@ export default function AdminDashboardPage() {
     try {
       await deleteGroup(deletingGroup.id);
       refetchGroups();
+      refetchPolls();
       toast.success("Gruppe gelöscht");
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        toast.error(
-          "Gruppe kann nicht gelöscht werden, da sie noch Abstimmungen oder Codes enthält."
-        );
-      } else {
-        toast.error(
-          err instanceof Error ? err.message : "Fehler beim Löschen"
-        );
-      }
+      toast.error(
+        err instanceof Error ? err.message : "Fehler beim Löschen"
+      );
     }
     setDeletingGroup(null);
   }
@@ -175,7 +181,7 @@ export default function AdminDashboardPage() {
         <h2 className="text-lg font-semibold mb-4">Abstimmungen</h2>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList>
+          <TabsList className="flex-wrap h-auto justify-start">
             <TabsTrigger value="all">Alle</TabsTrigger>
             {groups?.map((group) => (
               <TabsTrigger key={group.id} value={String(group.id)}>

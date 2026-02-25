@@ -79,9 +79,8 @@ public class VoteService {
         vote.setVotedAt(LocalDateTime.now());
         Vote saved = voteRepository.save(vote);
 
-        // Broadcast updated total vote count
-        long totalCount = voteRepository.countByPoll(poll);
-        webSocketEventService.broadcastVoteCount(pollId, totalCount);
+        // Broadcast updated vote counts with per-option breakdown
+        broadcastVoteCounts(poll, pollId);
 
         return saved;
     }
@@ -111,11 +110,18 @@ public class VoteService {
         existingVote.setOption(option);
         Vote saved = voteRepository.save(existingVote);
 
-        // Broadcast updated total vote count
-        long totalCount = voteRepository.countByPoll(poll);
-        webSocketEventService.broadcastVoteCount(pollId, totalCount);
+        // Broadcast updated vote counts with per-option breakdown
+        broadcastVoteCounts(poll, pollId);
 
         return saved;
+    }
+
+    private void broadcastVoteCounts(Poll poll, Long pollId) {
+        long yesCount = voteRepository.countByPollAndOption(poll, VoteOption.YES);
+        long noCount = voteRepository.countByPollAndOption(poll, VoteOption.NO);
+        long abstainCount = voteRepository.countByPollAndOption(poll, VoteOption.ABSTAIN);
+        long totalCount = yesCount + noCount + abstainCount;
+        webSocketEventService.broadcastVoteCount(pollId, totalCount, yesCount, noCount, abstainCount);
     }
 
     /**

@@ -99,9 +99,29 @@ export default function ParticipantDashboardPage() {
     // Connect to WebSocket and subscribe to poll status changes
     connect(
       () => {
-        subscribePollStatus((_event: PollStatusEvent) => {
-          // Refetch polls when any poll status changes
-          void fetchPolls();
+        subscribePollStatus((event: PollStatusEvent) => {
+          // Show toast notification based on status change
+          switch (event.status) {
+            case "OPEN":
+              toast.info("Neue Abstimmung verfügbar");
+              break;
+            case "CLOSED":
+              toast("Abstimmung wurde geschlossen");
+              break;
+            case "PUBLISHED":
+              toast.success("Ergebnis wurde veröffentlicht");
+              break;
+          }
+          // Update local state immediately for instant UI feedback
+          setPolls((prev) =>
+            prev.map((p) =>
+              p.id === event.pollId
+                ? { ...p, status: event.status as ParticipantPollResponse["status"] }
+                : p
+            )
+          );
+          // Also refetch after delay (transaction may not be committed yet)
+          setTimeout(() => void fetchPolls(), 500);
         });
       },
       (error) => {
@@ -181,24 +201,30 @@ export default function ParticipantDashboardPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">Abstimmungen</h1>
+    <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+      <div className="container mx-auto px-6 pt-6 pb-4 shrink-0">
+        <h1 className="text-2xl font-bold">Abstimmungen</h1>
+      </div>
 
-      {polls.length === 0 ? (
-        <Alert>
-          <AlertDescription>Keine Abstimmungen verfügbar</AlertDescription>
-        </Alert>
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {polls.map((poll) => (
-            <PollCard
-              key={poll.id}
-              poll={poll}
-              onVote={handleVoteClick}
-            />
-          ))}
+      <div className="flex-1 overflow-y-auto">
+        <div className="container mx-auto px-6 pb-6">
+          {polls.length === 0 ? (
+            <Alert>
+              <AlertDescription>Keine Abstimmungen verfügbar</AlertDescription>
+            </Alert>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {[...polls].sort((a, b) => b.id - a.id).map((poll) => (
+                <PollCard
+                  key={poll.id}
+                  poll={poll}
+                  onVote={handleVoteClick}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Confirmation Dialog */}
       <AlertDialog
@@ -243,6 +269,7 @@ interface PollCardProps {
 
 function PollCard({ poll, onVote }: PollCardProps) {
   const isOpen = poll.status === "OPEN";
+  const isClosed = poll.status === "CLOSED";
   const isPublished = poll.status === "PUBLISHED";
 
   /** Truncate description to ~120 characters */
@@ -251,13 +278,16 @@ function PollCard({ poll, onVote }: PollCardProps) {
       ? poll.description.slice(0, 120) + "..."
       : poll.description;
 
+  const statusLabel = isOpen ? "Offen" : isClosed ? "Geschlossen" : "Veröffentlicht";
+  const badgeVariant = isOpen ? "default" : "secondary";
+
   return (
     <Card>
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg">{poll.title}</CardTitle>
-          <Badge variant={isOpen ? "default" : "secondary"}>
-            {isOpen ? "Offen" : "Veröffentlicht"}
+          <Badge variant={badgeVariant}>
+            {statusLabel}
           </Badge>
         </div>
         {truncatedDescription && (
@@ -292,6 +322,13 @@ function PollCard({ poll, onVote }: PollCardProps) {
               </Button>
             ))}
           </div>
+        )}
+
+        {/* Waiting message for CLOSED polls */}
+        {isClosed && (
+          <p className="text-sm text-muted-foreground">
+            Warten auf Ergebnisse...
+          </p>
         )}
       </CardContent>
 

@@ -1,6 +1,7 @@
 package de.kyle.abstimmungstool.controller;
 
 import de.kyle.abstimmungstool.dto.ErrorResponse;
+import de.kyle.abstimmungstool.exception.DuplicateException;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -14,6 +15,16 @@ import java.util.NoSuchElementException;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    /**
+     * Handles DuplicateException (e.g., creating a group with an existing name).
+     * Returns HTTP 409 Conflict.
+     */
+    @ExceptionHandler(DuplicateException.class)
+    public ResponseEntity<ErrorResponse> handleDuplicateException(DuplicateException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse(ex.getMessage(), HttpStatus.CONFLICT.value()));
+    }
 
     /**
      * Handles IllegalStateException (e.g., invalid status transitions, non-empty group deletion).

@@ -16,4 +16,6 @@ public interface VotingCodeRepository extends JpaRepository<VotingCode, Long> {
     List<VotingCode> findByGroup(PollGroup group);
 
     long countByGroup(PollGroup group);
+
+    void deleteByGroup(PollGroup group);
 }

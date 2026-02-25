@@ -75,7 +75,7 @@ public class SecurityConfig {
         var admin = User.builder()
                 .username(adminUsername)
                 .password(passwordEncoder.encode(adminPassword))
-                .authorities("ADMIN")
+                .roles("ADMIN")
                 .build();
         return new InMemoryUserDetailsManager(admin);
     }

@@ -14,4 +14,6 @@ public interface PollRepository extends JpaRepository<Poll, Long> {
     List<Poll> findByGroup(PollGroup group);
 
     List<Poll> findByGroupAndStatusIn(PollGroup group, List<PollStatus> statuses);
+
+    void deleteByGroup(PollGroup group);
 }

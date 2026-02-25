@@ -42,21 +42,21 @@ const STATUS_TRANSITIONS: Partial<
 > = {
   DRAFT: {
     nextStatus: "OPEN",
-    label: "Öffnen",
-    confirmTitle: "Abstimmung öffnen",
+    label: "Abstimmung starten",
+    confirmTitle: "Abstimmung starten",
     confirmDesc:
-      "Möchten Sie die Abstimmung öffnen? Teilnehmer können dann abstimmen.",
+      "Möchten Sie die Abstimmung starten? Teilnehmer können dann abstimmen.",
   },
   OPEN: {
     nextStatus: "CLOSED",
-    label: "Schließen",
+    label: "Abstimmung schließen",
     confirmTitle: "Abstimmung schließen",
     confirmDesc:
       "Möchten Sie die Abstimmung schließen? Es können dann keine weiteren Stimmen abgegeben werden.",
   },
   CLOSED: {
     nextStatus: "PUBLISHED",
-    label: "Veröffentlichen",
+    label: "Ergebnis veröffentlichen",
     confirmTitle: "Ergebnis veröffentlichen",
     confirmDesc:
       "Möchten Sie das Ergebnis veröffentlichen? Das Ergebnis wird für alle Teilnehmer sichtbar.",
@@ -83,14 +83,19 @@ export default function PollDetailPage() {
 
   const { data: groups } = useAsyncData(fetchGroups);
 
-  // ── WebSocket for live vote counts ─────────────────────────
-  const [liveResults, setLiveResults] = useState<PollResultResponse | null>(
-    null
-  );
+  // ── WebSocket for live vote results ────────────────────────
+  const [liveResults, setLiveResults] = useState<PollResultResponse | null>(null);
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
 
+  // Initialize live results from poll data
   useEffect(() => {
-    if (!poll || poll.status !== "OPEN") return;
+    if (poll?.results) {
+      setLiveResults(poll.results);
+    }
+  }, [poll?.results]);
+
+  useEffect(() => {
+    if (!poll || (poll.status !== "OPEN" && poll.status !== "CLOSED")) return;
 
     function setupSubscription() {
       try {
@@ -99,30 +104,24 @@ export default function PollDetailPage() {
             yesCount: event.yesCount,
             noCount: event.noCount,
             abstainCount: event.abstainCount,
-            totalCount: event.totalCount,
+            totalCount: event.totalVotes,
           });
         });
       } catch {
-        // WebSocket not connected - try connecting first
-        connect(
-          () => {
-            try {
-              subscriptionRef.current = subscribePollVotes(
-                pollId,
-                (event: PollVoteEvent) => {
-                  setLiveResults({
-                    yesCount: event.yesCount,
-                    noCount: event.noCount,
-                    abstainCount: event.abstainCount,
-                    totalCount: event.totalCount,
-                  });
-                }
-              );
-            } catch {
-              // Subscription failed after connect - ignore
-            }
+        connect(() => {
+          try {
+            subscriptionRef.current = subscribePollVotes(pollId, (event: PollVoteEvent) => {
+              setLiveResults({
+                yesCount: event.yesCount,
+                noCount: event.noCount,
+                abstainCount: event.abstainCount,
+                totalCount: event.totalVotes,
+              });
+            });
+          } catch {
+            // ignore
           }
-        );
+        });
       }
     }
 
@@ -196,7 +195,6 @@ export default function PollDetailPage() {
     try {
       await updatePollStatus(pollId, transition.nextStatus);
       refetch();
-      setLiveResults(null);
       toast.success(`Status geändert: ${transition.label}`);
     } catch (err) {
       toast.error(
@@ -217,21 +215,30 @@ export default function PollDetailPage() {
 
   if (error || !poll) {
     return (
-      <div className="container mx-auto p-6">
-        <p className="text-destructive">
-          Fehler: {error ?? "Abstimmung nicht gefunden"}
-        </p>
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
+        <div className="rounded-lg border p-8 text-center space-y-4 max-w-md">
+          <h1 className="text-2xl font-bold">Abstimmung nicht gefunden</h1>
+          <p className="text-muted-foreground">
+            Die angeforderte Abstimmung existiert nicht oder wurde gelöscht.
+          </p>
+          <Button variant="outline" onClick={() => navigate("/admin")}>
+            &larr; Zurück zum Dashboard
+          </Button>
+        </div>
       </div>
     );
   }
 
   const transition = STATUS_TRANSITIONS[poll.status];
   const displayResults =
+    poll.status !== "DRAFT" ? (liveResults ?? poll.results) : null;
+
+  const resultsTitle =
     poll.status === "PUBLISHED"
-      ? poll.results
-      : poll.status === "OPEN"
-        ? liveResults
-        : null;
+      ? "Ergebnis"
+      : poll.status === "CLOSED"
+        ? "Ergebnis (geschlossen)"
+        : "Live-Ergebnis";
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -291,15 +298,11 @@ export default function PollDetailPage() {
         </Card>
       )}
 
-      {/* ── Results (OPEN: live, PUBLISHED: final) ───────────── */}
+      {/* ── Results (OPEN, CLOSED, PUBLISHED) ─────────────────── */}
       {displayResults && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
-              {poll.status === "PUBLISHED"
-                ? "Ergebnis"
-                : "Live-Stimmen"}
-            </CardTitle>
+            <CardTitle className="text-base">{resultsTitle}</CardTitle>
           </CardHeader>
           <CardContent>
             <ResultsDisplay results={displayResults} />
@@ -380,9 +383,9 @@ function ResultsDisplay({ results }: ResultsDisplayProps) {
 
   return (
     <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-      <ResultCard label="Ja" count={yesCount} percentage={percent(yesCount)} color="text-green-600" />
-      <ResultCard label="Nein" count={noCount} percentage={percent(noCount)} color="text-red-600" />
-      <ResultCard label="Enthaltung" count={abstainCount} percentage={percent(abstainCount)} color="text-yellow-600" />
+      <ResultCard label="Ja" count={yesCount} percentage={percent(yesCount)} color="text-foreground" />
+      <ResultCard label="Nein" count={noCount} percentage={percent(noCount)} color="text-foreground" />
+      <ResultCard label="Enthaltung" count={abstainCount} percentage={percent(abstainCount)} color="text-foreground" />
       <ResultCard label="Gesamt" count={totalCount} percentage="" color="text-foreground" />
     </div>
   );

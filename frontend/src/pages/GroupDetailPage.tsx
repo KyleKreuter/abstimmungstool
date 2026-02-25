@@ -145,10 +145,16 @@ export default function GroupDetailPage() {
 
   if (groupError || !group) {
     return (
-      <div className="container mx-auto p-6">
-        <p className="text-destructive">
-          Fehler: {groupError ?? "Gruppe nicht gefunden"}
-        </p>
+      <div className="container mx-auto p-6 flex items-center justify-center min-h-[calc(100vh-3.5rem)]">
+        <div className="rounded-lg border p-8 text-center space-y-4 max-w-md">
+          <h1 className="text-2xl font-bold">Gruppe nicht gefunden</h1>
+          <p className="text-muted-foreground">
+            Die angeforderte Gruppe existiert nicht oder wurde gelöscht.
+          </p>
+          <Button variant="outline" onClick={() => navigate("/admin")}>
+            &larr; Zurück zum Dashboard
+          </Button>
+        </div>
       </div>
     );
   }
