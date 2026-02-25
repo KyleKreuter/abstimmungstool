@@ -8,6 +8,18 @@ export interface AuthResponse {
   message: string;
 }
 
+/** User role type */
+export type UserRole = "ADMIN" | "PARTICIPANT";
+
+/** Response from GET /api/auth/me when authenticated */
+export interface AuthMeResponse {
+  authenticated: boolean;
+  principal?: string;
+  role?: UserRole;
+  votingCodeId?: number;
+  pollGroupId?: number;
+}
+
 /** Response for a poll group (admin view) */
 export interface PollGroupResponse {
   id: number;
