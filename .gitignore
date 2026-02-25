@@ -161,3 +161,10 @@ fabric.properties
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser
 
+### Frontend ###
+frontend/node_modules/
+frontend/dist/
+frontend/.task-completed
+frontend/.task-blocked
+frontend/.task-failed
+
