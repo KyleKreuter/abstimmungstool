@@ -1,0 +1,32 @@
+services:
+  backend:
+    build: .
+    container_name: abstimmungstool-backend
+    ports:
+      - "4222:4222"
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: mysql:8.0
+    container_name: abstimmungstool-db
+    environment:
+      MYSQL_DATABASE: abstimmungstool
+      MYSQL_USER: abstimmung
+      MYSQL_PASSWORD: abstimmung
+      MYSQL_ROOT_PASSWORD: root
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:
