@@ -20,14 +20,12 @@ import {
 } from "@/lib/admin-api";
 import {
   connect,
-  disconnect,
   isConnected,
   subscribePollVotes,
 } from "@/lib/websocket";
 import { formatDate } from "@/lib/format";
 import type {
   PollStatus,
-  PollDetailResponse,
   PollVoteEvent,
   PollResultResponse,
 } from "@/lib/types";
