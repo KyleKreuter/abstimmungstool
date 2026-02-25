@@ -55,14 +55,6 @@ public class SecurityConfig {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/polls/**", "/api/my-votes").hasAnyRole("PARTICIPANT", "ADMIN")
                         .requestMatchers("/ws/**").authenticated()
-                        .requestMatchers(
-                                "/",
-                                "/index.html",
-                                "/assets/**",
-                                "/favicon.ico",
-                                "/*.js",
-                                "/*.css"
-                        ).permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(ex -> ex
@@ -83,7 +75,7 @@ public class SecurityConfig {
         var admin = User.builder()
                 .username(adminUsername)
                 .password(passwordEncoder.encode(adminPassword))
-                .roles("ADMIN")
+                .authorities("ADMIN")
                 .build();
         return new InMemoryUserDetailsManager(admin);
     }

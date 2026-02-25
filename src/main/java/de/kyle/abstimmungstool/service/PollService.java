@@ -120,6 +120,14 @@ public class PollService {
 
         webSocketEventService.broadcastPollStatusChange(saved);
 
+        if (saved.getStatus() == PollStatus.PUBLISHED) {
+            Map<VoteOption, Long> results = new EnumMap<>(VoteOption.class);
+            results.put(VoteOption.YES, voteRepository.countByPollAndOption(saved, VoteOption.YES));
+            results.put(VoteOption.NO, voteRepository.countByPollAndOption(saved, VoteOption.NO));
+            results.put(VoteOption.ABSTAIN, voteRepository.countByPollAndOption(saved, VoteOption.ABSTAIN));
+            webSocketEventService.broadcastResults(saved.getId(), results);
+        }
+
         return saved;
     }
 

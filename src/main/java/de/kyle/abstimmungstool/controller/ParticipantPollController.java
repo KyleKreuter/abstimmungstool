@@ -40,16 +40,13 @@ public class ParticipantPollController {
 
     private final PollService pollService;
     private final VoteService voteService;
-    private final VotingCodeRepository votingCodeRepository;
     private final PollGroupRepository pollGroupRepository;
 
     public ParticipantPollController(PollService pollService,
                                      VoteService voteService,
-                                     VotingCodeRepository votingCodeRepository,
                                      PollGroupRepository pollGroupRepository) {
         this.pollService = pollService;
         this.voteService = voteService;
-        this.votingCodeRepository = votingCodeRepository;
         this.pollGroupRepository = pollGroupRepository;
     }
 

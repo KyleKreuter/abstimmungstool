@@ -9,6 +9,7 @@ import de.kyle.abstimmungstool.repository.VotingCodeRepository;
 import de.kyle.abstimmungstool.service.PollGroupService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,7 +45,7 @@ public class PollGroupController {
      */
     @PostMapping
     public ResponseEntity<PollGroupResponse> createGroup(@RequestBody CreateGroupRequest request) {
-        PollGroup group = pollGroupService.createGroup(request.name());
+        PollGroup group = pollGroupService.createGroup(HtmlUtils.htmlEscape(request.name()));
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(group));
     }
 
@@ -74,7 +75,7 @@ public class PollGroupController {
     @PutMapping("/{id}")
     public ResponseEntity<PollGroupResponse> updateGroup(@PathVariable Long id,
                                                          @RequestBody UpdateGroupRequest request) {
-        PollGroup group = pollGroupService.renameGroup(id, request.name());
+        PollGroup group = pollGroupService.renameGroup(id, HtmlUtils.htmlEscape(request.name()));
         return ResponseEntity.ok(toResponse(group));
     }
 

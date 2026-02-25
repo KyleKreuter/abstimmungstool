@@ -14,6 +14,7 @@ import de.kyle.abstimmungstool.service.PollService;
 import de.kyle.abstimmungstool.service.VoteService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.util.HtmlUtils;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,7 +49,7 @@ public class PollController {
     @PostMapping("/groups/{groupId}/polls")
     public ResponseEntity<PollResponse> createPoll(@PathVariable Long groupId,
                                                    @RequestBody CreatePollRequest request) {
-        Poll poll = pollService.createPoll(groupId, request.title(), request.description());
+        Poll poll = pollService.createPoll(groupId, HtmlUtils.htmlEscape(request.title()), HtmlUtils.htmlEscape(request.description()));
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(poll));
     }
 
@@ -58,7 +59,7 @@ public class PollController {
     @PutMapping("/polls/{id}")
     public ResponseEntity<PollResponse> updatePoll(@PathVariable Long id,
                                                    @RequestBody UpdatePollRequest request) {
-        Poll poll = pollService.updatePoll(id, request.title(), request.description());
+        Poll poll = pollService.updatePoll(id, HtmlUtils.htmlEscape(request.title()), HtmlUtils.htmlEscape(request.description()));
         return ResponseEntity.ok(toResponse(poll));
     }
 
@@ -79,7 +80,7 @@ public class PollController {
     @PutMapping("/polls/{id}/notes")
     public ResponseEntity<PollResponse> updateNotes(@PathVariable Long id,
                                                     @RequestBody UpdateNotesRequest request) {
-        Poll poll = pollService.updateNotes(id, request.notes());
+        Poll poll = pollService.updateNotes(id, HtmlUtils.htmlEscape(request.notes()));
         return ResponseEntity.ok(toResponse(poll));
     }
 
