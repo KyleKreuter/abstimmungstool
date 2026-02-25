@@ -13,6 +13,8 @@ import java.util.Optional;
 @Repository
 public interface VoteRepository extends JpaRepository<Vote, Long> {
 
+    long countByPoll(Poll poll);
+
     long countByPollAndOption(Poll poll, VoteOption option);
 
     boolean existsByPollAndVotingCode(Poll poll, VotingCode votingCode);
