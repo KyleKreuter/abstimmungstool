@@ -15,6 +15,7 @@ import de.kyle.abstimmungstool.service.VoteService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.util.HtmlUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -94,6 +95,15 @@ public class PollController {
                 .map(this::toResponse)
                 .toList();
         return ResponseEntity.ok(responses);
+    }
+
+    /**
+     * Deletes a PUBLISHED poll and all associated votes.
+     */
+    @DeleteMapping("/polls/{id}")
+    public ResponseEntity<Void> deletePoll(@PathVariable Long id) {
+        pollService.deletePoll(id);
+        return ResponseEntity.noContent().build();
     }
 
     /**

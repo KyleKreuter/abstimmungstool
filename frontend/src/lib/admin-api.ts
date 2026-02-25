@@ -77,6 +77,11 @@ export function updatePollStatus(
   return patch<PollResponse>(`/api/admin/polls/${id}/status`, { status });
 }
 
+/** Delete a PUBLISHED poll */
+export function deletePoll(id: number): Promise<void> {
+  return del(`/api/admin/polls/${id}`);
+}
+
 /** Update admin notes on a poll */
 export function updatePollNotes(
   id: number,

@@ -25,9 +25,9 @@ import {
   updateGroup,
   deleteGroup,
   createPoll,
+  deletePoll,
   generateCodes,
 } from "@/lib/admin-api";
-import { ApiError } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import type { PollResponse, VotingCodeResponse } from "@/lib/types";
 
@@ -85,15 +85,9 @@ export default function GroupDetailPage() {
       toast.success("Gruppe gelöscht");
       navigate("/admin");
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        toast.error(
-          "Gruppe kann nicht gelöscht werden, da sie noch Abstimmungen oder Codes enthält."
-        );
-      } else {
-        toast.error(
-          err instanceof Error ? err.message : "Fehler beim Löschen"
-        );
-      }
+      toast.error(
+        err instanceof Error ? err.message : "Fehler beim Löschen"
+      );
     }
     setDeleteOpen(false);
   }
@@ -113,6 +107,24 @@ export default function GroupDetailPage() {
     },
     [refetchPolls, refetchGroup]
   );
+
+  // ── Delete poll state ─────────────────────────────────────
+  const [deletingPoll, setDeletingPoll] = useState<PollResponse | null>(null);
+
+  async function handleDeletePoll() {
+    if (!deletingPoll) return;
+    try {
+      await deletePoll(deletingPoll.id);
+      refetchPolls();
+      refetchGroup();
+      toast.success("Abstimmung gelöscht");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Fehler beim Löschen"
+      );
+    }
+    setDeletingPoll(null);
+  }
 
   // ── Generate codes dialog ─────────────────────────────────
   const [codesDialogOpen, setCodesDialogOpen] = useState(false);
@@ -203,6 +215,7 @@ export default function GroupDetailPage() {
           <PollsTable
             polls={polls}
             onPollClick={(poll) => navigate(`/admin/polls/${poll.id}`)}
+            onDelete={setDeletingPoll}
           />
         ) : (
           <p className="py-4 text-center text-muted-foreground">
@@ -245,7 +258,7 @@ export default function GroupDetailPage() {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Gruppe löschen"
-        description={`Möchten Sie die Gruppe "${group.name}" wirklich löschen? Dies ist nur möglich, wenn die Gruppe leer ist.`}
+        description={`Möchten Sie die Gruppe "${group.name}" wirklich löschen? Alle zugehörigen Abstimmungen, Stimmen und Codes werden ebenfalls gelöscht.`}
         confirmLabel="Löschen"
         onConfirm={handleDelete}
         destructive
@@ -264,6 +277,18 @@ export default function GroupDetailPage() {
         onOpenChange={setCodesDialogOpen}
         onGenerate={handleGenerateCodes}
       />
+
+      <ConfirmDialog
+        open={deletingPoll !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingPoll(null);
+        }}
+        title="Abstimmung löschen"
+        description={`Möchten Sie die Abstimmung "${deletingPoll?.title}" wirklich löschen? Alle zugehörigen Stimmen werden ebenfalls gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`}
+        confirmLabel="Löschen"
+        onConfirm={handleDeletePoll}
+        destructive
+      />
     </div>
   );
 }
@@ -275,9 +300,10 @@ export default function GroupDetailPage() {
 interface PollsTableProps {
   polls: PollResponse[];
   onPollClick: (poll: PollResponse) => void;
+  onDelete: (poll: PollResponse) => void;
 }
 
-function PollsTable({ polls, onPollClick }: PollsTableProps) {
+function PollsTable({ polls, onPollClick, onDelete }: PollsTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -285,6 +311,7 @@ function PollsTable({ polls, onPollClick }: PollsTableProps) {
           <TableHead>Titel</TableHead>
           <TableHead>Status</TableHead>
           <TableHead>Erstellt</TableHead>
+          <TableHead className="text-right">Aktionen</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -299,6 +326,20 @@ function PollsTable({ polls, onPollClick }: PollsTableProps) {
               <StatusBadge status={poll.status} />
             </TableCell>
             <TableCell>{formatDate(poll.createdAt)}</TableCell>
+            <TableCell className="text-right">
+              {poll.status === "PUBLISHED" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(poll);
+                  }}
+                >
+                  Löschen
+                </Button>
+              )}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

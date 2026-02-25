@@ -24,6 +24,7 @@ import {
   updateGroup,
   deleteGroup,
   createPoll,
+  deletePoll,
 } from "@/lib/admin-api";
 import { formatDate } from "@/lib/format";
 import type { PollGroupResponse, PollResponse } from "@/lib/types";
@@ -125,6 +126,24 @@ export default function AdminDashboardPage() {
     setDeletingGroup(null);
   }
 
+  // ── Delete poll state ─────────────────────────────────────
+  const [deletingPoll, setDeletingPoll] = useState<PollResponse | null>(null);
+
+  async function handleDeletePoll() {
+    if (!deletingPoll) return;
+    try {
+      await deletePoll(deletingPoll.id);
+      refetchPolls();
+      refetchGroups();
+      toast.success("Abstimmung gelöscht");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Fehler beim Löschen"
+      );
+    }
+    setDeletingPoll(null);
+  }
+
   // ── Poll dialog state ──────────────────────────────────────
   const [pollDialogOpen, setPollDialogOpen] = useState(false);
 
@@ -195,6 +214,7 @@ export default function AdminDashboardPage() {
             <PollsTable
               polls={filteredPolls}
               onPollClick={(poll) => navigate(`/admin/polls/${poll.id}`)}
+              onDelete={setDeletingPoll}
             />
           </TabsContent>
         </Tabs>
@@ -240,9 +260,21 @@ export default function AdminDashboardPage() {
           if (!open) setDeletingGroup(null);
         }}
         title="Gruppe löschen"
-        description={`Möchten Sie die Gruppe "${deletingGroup?.name}" wirklich löschen? Dies ist nur möglich, wenn die Gruppe leer ist.`}
+        description={`Möchten Sie die Gruppe "${deletingGroup?.name}" wirklich löschen? Alle zugehörigen Abstimmungen, Stimmen und Codes werden ebenfalls gelöscht.`}
         confirmLabel="Löschen"
         onConfirm={handleDeleteGroup}
+        destructive
+      />
+
+      <ConfirmDialog
+        open={deletingPoll !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeletingPoll(null);
+        }}
+        title="Abstimmung löschen"
+        description={`Möchten Sie die Abstimmung "${deletingPoll?.title}" wirklich löschen? Alle zugehörigen Stimmen werden ebenfalls gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`}
+        confirmLabel="Löschen"
+        onConfirm={handleDeletePoll}
         destructive
       />
     </div>
@@ -256,10 +288,11 @@ export default function AdminDashboardPage() {
 interface PollsTableProps {
   polls: PollResponse[];
   onPollClick: (poll: PollResponse) => void;
+  onDelete: (poll: PollResponse) => void;
 }
 
 /** Table displaying a list of polls */
-function PollsTable({ polls, onPollClick }: PollsTableProps) {
+function PollsTable({ polls, onPollClick, onDelete }: PollsTableProps) {
   if (polls.length === 0) {
     return (
       <p className="py-8 text-center text-muted-foreground">
@@ -276,6 +309,7 @@ function PollsTable({ polls, onPollClick }: PollsTableProps) {
           <TableHead>Status</TableHead>
           <TableHead>Gruppe</TableHead>
           <TableHead>Erstellt</TableHead>
+          <TableHead className="text-right">Aktionen</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -291,6 +325,20 @@ function PollsTable({ polls, onPollClick }: PollsTableProps) {
             </TableCell>
             <TableCell>{poll.groupName}</TableCell>
             <TableCell>{formatDate(poll.createdAt)}</TableCell>
+            <TableCell className="text-right">
+              {poll.status === "PUBLISHED" && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(poll);
+                  }}
+                >
+                  Löschen
+                </Button>
+              )}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>

@@ -17,6 +17,7 @@ import {
   updatePoll,
   updatePollStatus,
   updatePollNotes,
+  deletePoll,
 } from "@/lib/admin-api";
 import {
   connect,
@@ -204,6 +205,22 @@ export default function PollDetailPage() {
     setStatusConfirmOpen(false);
   }
 
+  // ── Delete poll ──────────────────────────────────────────
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+
+  async function handleDeletePoll() {
+    try {
+      await deletePoll(pollId);
+      toast.success("Abstimmung gelöscht");
+      navigate("/admin");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Fehler beim Löschen"
+      );
+    }
+    setDeleteConfirmOpen(false);
+  }
+
   // ── Loading & Error ────────────────────────────────────────
   if (loading) {
     return (
@@ -276,6 +293,14 @@ export default function PollDetailPage() {
               onClick={() => setEditDialogOpen(true)}
             >
               Bearbeiten
+            </Button>
+          )}
+          {poll.status === "PUBLISHED" && (
+            <Button
+              variant="outline"
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              Löschen
             </Button>
           )}
           {transition && (
@@ -358,6 +383,16 @@ export default function PollDetailPage() {
           onConfirm={handleStatusChange}
         />
       )}
+
+      <ConfirmDialog
+        open={deleteConfirmOpen}
+        onOpenChange={setDeleteConfirmOpen}
+        title="Abstimmung löschen"
+        description={`Möchten Sie die Abstimmung "${poll.title}" wirklich löschen? Alle zugehörigen Stimmen werden ebenfalls gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.`}
+        confirmLabel="Löschen"
+        onConfirm={handleDeletePoll}
+        destructive
+      />
     </div>
   );
 }

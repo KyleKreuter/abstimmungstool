@@ -160,6 +160,24 @@ public class PollService {
     }
 
     /**
+     * Deletes a poll and all associated votes. Only allowed if the poll is PUBLISHED.
+     *
+     * @param id the poll ID
+     * @throws EntityNotFoundException if the poll does not exist
+     * @throws IllegalStateException   if the poll is not in PUBLISHED status
+     */
+    public void deletePoll(Long id) {
+        Poll poll = getPollById(id);
+
+        if (poll.getStatus() != PollStatus.PUBLISHED) {
+            throw new IllegalStateException("Only PUBLISHED polls can be deleted. Current status: " + poll.getStatus());
+        }
+
+        voteRepository.deleteByPoll(poll);
+        pollRepository.delete(poll);
+    }
+
+    /**
      * Returns polls visible to a participant (only OPEN and PUBLISHED polls in the group).
      *
      * @param group the poll group
