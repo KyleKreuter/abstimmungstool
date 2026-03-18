@@ -27,6 +27,7 @@ export interface PollGroupResponse {
   createdAt: string;
   pollCount: number;
   codeCount: number;
+  activeCodeCount: number;
 }
 
 /** Poll status enum */
@@ -86,6 +87,16 @@ export interface VotingCodeResponse {
   id: number;
   code: string;
   groupId: number;
+  active: boolean;
+}
+
+/** Generic paginated response from the API */
+export interface PageResponse<T> {
+  content: T[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
 }
 
 /** Standard error response from the API */

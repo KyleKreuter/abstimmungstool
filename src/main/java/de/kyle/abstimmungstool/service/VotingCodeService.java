@@ -3,8 +3,12 @@ package de.kyle.abstimmungstool.service;
 import de.kyle.abstimmungstool.entity.PollGroup;
 import de.kyle.abstimmungstool.entity.VotingCode;
 import de.kyle.abstimmungstool.repository.VotingCodeRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.persistence.EntityNotFoundException;
 
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -80,6 +84,33 @@ public class VotingCodeService {
     }
 
     /**
+     * Returns voting codes for a group in a paginated fashion.
+     *
+     * @param groupId  the group ID
+     * @param pageable pagination parameters
+     * @return page of voting codes
+     */
+    @Transactional(readOnly = true)
+    public Page<VotingCode> getCodesByGroup(Long groupId, Pageable pageable) {
+        PollGroup group = pollGroupService.getGroupById(groupId);
+        return votingCodeRepository.findByGroup(group, pageable);
+    }
+
+    /**
+     * Searches voting codes for a group by code string, paginated.
+     *
+     * @param groupId  the group ID
+     * @param search   the search string to match against code
+     * @param pageable pagination parameters
+     * @return page of matching voting codes
+     */
+    @Transactional(readOnly = true)
+    public Page<VotingCode> searchCodesByGroup(Long groupId, String search, Pageable pageable) {
+        PollGroup group = pollGroupService.getGroupById(groupId);
+        return votingCodeRepository.findByGroupAndCodeContainingIgnoreCase(group, search, pageable);
+    }
+
+    /**
      * Validates a voting code string and returns the corresponding entity.
      *
      * @param code the code string to validate
@@ -90,6 +121,20 @@ public class VotingCodeService {
     public VotingCode validateCode(String code) {
         return votingCodeRepository.findByCode(code)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid voting code: " + code));
+    }
+
+    /**
+     * Toggles the active state of a voting code.
+     *
+     * @param codeId the voting code ID
+     * @return the updated voting code
+     * @throws EntityNotFoundException if the code does not exist
+     */
+    public VotingCode toggleActive(Long codeId) {
+        VotingCode code = votingCodeRepository.findById(codeId)
+                .orElseThrow(() -> new EntityNotFoundException("Voting code not found: " + codeId));
+        code.setActive(!code.isActive());
+        return votingCodeRepository.save(code);
     }
 
     /**

@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { X } from "lucide-react";
 
 import {
   Table,
@@ -11,15 +12,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import StatusBadge from "@/components/StatusBadge";
 import GroupDialog from "@/components/GroupDialog";
 import PollDialog from "@/components/PollDialog";
 import GenerateCodesDialog from "@/components/GenerateCodesDialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import TablePagination from "@/components/TablePagination";
 import { useAsyncData } from "@/hooks/useAsyncData";
+import { Badge } from "@/components/ui/badge";
 import {
   fetchGroup,
-  fetchGroups,
+  fetchAllGroups,
   fetchPolls,
   fetchCodes,
   updateGroup,
@@ -27,44 +31,68 @@ import {
   createPoll,
   deletePoll,
   generateCodes,
+  toggleCodeActive,
 } from "@/lib/admin-api";
 import { formatDate } from "@/lib/format";
 import type { PollResponse, VotingCodeResponse } from "@/lib/types";
 
-/**
- * Group detail page showing group info, associated polls, and voting codes.
- * Provides actions for renaming, deleting, creating polls, and generating codes.
- */
 export default function GroupDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const groupId = Number(id);
 
-  // ── Data fetching ──────────────────────────────────────────
+  // ── Pagination & search state ───────────────────────────────
+  const [pollsPage, setPollsPage] = useState(0);
+  const [codesPage, setCodesPage] = useState(0);
+  const [codeSearch, setCodeSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // Debounce search input
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(codeSearch);
+      setCodesPage(0);
+    }, 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [codeSearch]);
+
+  // ── Data fetching ───────────────────────────────────────────
   const {
     data: group,
     loading: groupLoading,
     error: groupError,
     refetch: refetchGroup,
+    setData: setGroup,
   } = useAsyncData(() => fetchGroup(groupId), [groupId]);
 
   const {
-    data: groups,
-  } = useAsyncData(fetchGroups);
+    data: allGroupsData,
+  } = useAsyncData(() => fetchAllGroups(), []);
 
   const {
-    data: polls,
+    data: pollsData,
     loading: pollsLoading,
     refetch: refetchPolls,
-  } = useAsyncData(() => fetchPolls(groupId), [groupId]);
+  } = useAsyncData(
+    () => fetchPolls(pollsPage, 20, groupId),
+    [groupId, pollsPage]
+  );
 
   const {
-    data: codes,
+    data: codesData,
     loading: codesLoading,
     refetch: refetchCodes,
-  } = useAsyncData(() => fetchCodes(groupId), [groupId]);
+    setData: setCodesData,
+  } = useAsyncData(
+    () => fetchCodes(groupId, codesPage, 20, debouncedSearch || undefined),
+    [groupId, codesPage, debouncedSearch]
+  );
 
-  // ── Rename dialog ──────────────────────────────────────────
+  const polls = pollsData?.content ?? [];
+  const codes = codesData?.content ?? [];
+
+  // ── Rename dialog ───────────────────────────────────────────
   const [renameOpen, setRenameOpen] = useState(false);
 
   const handleRename = useCallback(
@@ -76,7 +104,7 @@ export default function GroupDetailPage() {
     [groupId, refetchGroup]
   );
 
-  // ── Delete dialog ──────────────────────────────────────────
+  // ── Delete dialog ───────────────────────────────────────────
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   async function handleDelete() {
@@ -92,7 +120,7 @@ export default function GroupDetailPage() {
     setDeleteOpen(false);
   }
 
-  // ── Poll dialog ────────────────────────────────────────────
+  // ── Poll dialog ─────────────────────────────────────────────
   const [pollDialogOpen, setPollDialogOpen] = useState(false);
 
   const handleCreatePoll = useCallback(
@@ -108,7 +136,7 @@ export default function GroupDetailPage() {
     [refetchPolls, refetchGroup]
   );
 
-  // ── Delete poll state ─────────────────────────────────────
+  // ── Delete poll state ───────────────────────────────────────
   const [deletingPoll, setDeletingPoll] = useState<PollResponse | null>(null);
 
   async function handleDeletePoll() {
@@ -126,7 +154,7 @@ export default function GroupDetailPage() {
     setDeletingPoll(null);
   }
 
-  // ── Generate codes dialog ─────────────────────────────────
+  // ── Generate codes dialog ──────────────────────────────────
   const [codesDialogOpen, setCodesDialogOpen] = useState(false);
 
   const handleGenerateCodes = useCallback(
@@ -139,14 +167,44 @@ export default function GroupDetailPage() {
     [groupId, refetchCodes, refetchGroup]
   );
 
-  // ── Copy code to clipboard ────────────────────────────────
+  // ── Toggle code active ─────────────────────────────────────
+  async function handleToggleActive(codeId: number) {
+    try {
+      const updated = await toggleCodeActive(groupId, codeId);
+      setCodesData((prev) =>
+        prev
+          ? {
+              ...prev,
+              content: prev.content.map((c) =>
+                c.id === codeId ? updated : c
+              ),
+            }
+          : null
+      );
+      setGroup((prev) =>
+        prev
+          ? {
+              ...prev,
+              activeCodeCount:
+                prev.activeCodeCount + (updated.active ? 1 : -1),
+            }
+          : null
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Fehler beim Umschalten"
+      );
+    }
+  }
+
+  // ── Copy code to clipboard ─────────────────────────────────
   function copyCode(code: string) {
     navigator.clipboard.writeText(code).then(() => {
       toast.success("Code kopiert");
     });
   }
 
-  // ── Loading & Error ────────────────────────────────────────
+  // ── Loading & Error ─────────────────────────────────────────
   if (groupLoading) {
     return (
       <div className="container mx-auto p-6">
@@ -173,7 +231,7 @@ export default function GroupDetailPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-8">
-      {/* ── Header ───────────────────────────────────────────── */}
+      {/* ── Header ────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <Button
@@ -198,7 +256,7 @@ export default function GroupDetailPage() {
         </div>
       </div>
 
-      {/* ── Polls section ────────────────────────────────────── */}
+      {/* ── Polls section ─────────────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">
@@ -209,14 +267,23 @@ export default function GroupDetailPage() {
           </Button>
         </div>
 
-        {pollsLoading ? (
+        {pollsLoading && !pollsData ? (
           <p className="text-muted-foreground">Laden...</p>
-        ) : polls && polls.length > 0 ? (
-          <PollsTable
-            polls={polls}
-            onPollClick={(poll) => navigate(`/admin/polls/${poll.id}`)}
-            onDelete={setDeletingPoll}
-          />
+        ) : polls.length > 0 ? (
+          <>
+            <PollsTable
+              polls={polls}
+              onPollClick={(poll) => navigate(`/admin/polls/${poll.id}`)}
+              onDelete={setDeletingPoll}
+            />
+            {pollsData && (
+              <TablePagination
+                page={pollsData.page}
+                totalPages={pollsData.totalPages}
+                onPageChange={setPollsPage}
+              />
+            )}
+          </>
         ) : (
           <p className="py-4 text-center text-muted-foreground">
             Keine Abstimmungen in dieser Gruppe.
@@ -224,29 +291,63 @@ export default function GroupDetailPage() {
         )}
       </section>
 
-      {/* ── Codes section ────────────────────────────────────── */}
+      {/* ── Codes section ─────────────────────────────────────── */}
       <section>
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold">
-            Abstimmungscodes ({group.codeCount})
+            Abstimmungscodes ({group.activeCodeCount} von {group.codeCount}{" "}
+            aktiv)
           </h2>
           <Button size="sm" onClick={() => setCodesDialogOpen(true)}>
             Codes generieren
           </Button>
         </div>
 
-        {codesLoading ? (
+        {/* Search input */}
+        <div className="relative mb-4 max-w-sm">
+          <Input
+            placeholder="Code suchen..."
+            value={codeSearch}
+            onChange={(e) => setCodeSearch(e.target.value)}
+          />
+          {codeSearch && (
+            <button
+              type="button"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              onClick={() => setCodeSearch("")}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {codesLoading && !codesData ? (
           <p className="text-muted-foreground">Laden...</p>
-        ) : codes && codes.length > 0 ? (
-          <CodesTable codes={codes} onCopy={copyCode} />
+        ) : codes.length > 0 ? (
+          <>
+            <CodesTable
+              codes={codes}
+              onCopy={copyCode}
+              onToggleActive={handleToggleActive}
+            />
+            {codesData && (
+              <TablePagination
+                page={codesData.page}
+                totalPages={codesData.totalPages}
+                onPageChange={setCodesPage}
+              />
+            )}
+          </>
         ) : (
           <p className="py-4 text-center text-muted-foreground">
-            Keine Codes in dieser Gruppe.
+            {debouncedSearch
+              ? "Keine Codes gefunden."
+              : "Keine Codes in dieser Gruppe."}
           </p>
         )}
       </section>
 
-      {/* ── Dialogs ──────────────────────────────────────────── */}
+      {/* ── Dialogs ───────────────────────────────────────────── */}
       <GroupDialog
         open={renameOpen}
         onOpenChange={setRenameOpen}
@@ -267,7 +368,7 @@ export default function GroupDetailPage() {
       <PollDialog
         open={pollDialogOpen}
         onOpenChange={setPollDialogOpen}
-        groups={groups ?? []}
+        groups={allGroupsData?.content ?? []}
         defaultGroupId={groupId}
         onSave={handleCreatePoll}
       />
@@ -350,22 +451,36 @@ function PollsTable({ polls, onPollClick, onDelete }: PollsTableProps) {
 interface CodesTableProps {
   codes: VotingCodeResponse[];
   onCopy: (code: string) => void;
+  onToggleActive: (codeId: number) => void;
 }
 
-function CodesTable({ codes, onCopy }: CodesTableProps) {
+function CodesTable({ codes, onCopy, onToggleActive }: CodesTableProps) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Code</TableHead>
-          <TableHead className="text-right">Aktion</TableHead>
+          <TableHead>Status</TableHead>
+          <TableHead className="text-right">Aktionen</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {codes.map((code) => (
           <TableRow key={code.id}>
             <TableCell className="font-mono">{code.code}</TableCell>
-            <TableCell className="text-right">
+            <TableCell>
+              <Badge variant={code.active ? "default" : "secondary"}>
+                {code.active ? "Aktiv" : "Inaktiv"}
+              </Badge>
+            </TableCell>
+            <TableCell className="text-right space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onToggleActive(code.id)}
+              >
+                {code.active ? "Deaktivieren" : "Aktivieren"}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

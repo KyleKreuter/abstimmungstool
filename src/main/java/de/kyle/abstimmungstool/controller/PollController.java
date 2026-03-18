@@ -2,6 +2,7 @@ package de.kyle.abstimmungstool.controller;
 
 import de.kyle.abstimmungstool.dto.ChangeStatusRequest;
 import de.kyle.abstimmungstool.dto.CreatePollRequest;
+import de.kyle.abstimmungstool.dto.PageResponse;
 import de.kyle.abstimmungstool.dto.PollDetailResponse;
 import de.kyle.abstimmungstool.dto.PollResponse;
 import de.kyle.abstimmungstool.dto.PollResultResponse;
@@ -12,6 +13,9 @@ import de.kyle.abstimmungstool.entity.PollStatus;
 import de.kyle.abstimmungstool.entity.VoteOption;
 import de.kyle.abstimmungstool.service.PollService;
 import de.kyle.abstimmungstool.service.VoteService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.util.HtmlUtils;
@@ -86,15 +90,23 @@ public class PollController {
     }
 
     /**
-     * Returns all polls, optionally filtered by group ID.
+     * Returns all polls, optionally filtered by group ID, paginated.
      */
     @GetMapping("/polls")
-    public ResponseEntity<List<PollResponse>> getAllPolls(
-            @RequestParam(required = false) Long groupId) {
-        List<PollResponse> responses = pollService.getAllPolls(groupId).stream()
-                .map(this::toResponse)
-                .toList();
-        return ResponseEntity.ok(responses);
+    public ResponseEntity<PageResponse<PollResponse>> getAllPolls(
+            @RequestParam(required = false) Long groupId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<Poll> pollPage = pollService.getAllPolls(groupId,
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+        PageResponse<PollResponse> response = new PageResponse<>(
+                pollPage.getContent().stream().map(this::toResponse).toList(),
+                pollPage.getNumber(),
+                pollPage.getSize(),
+                pollPage.getTotalElements(),
+                pollPage.getTotalPages()
+        );
+        return ResponseEntity.ok(response);
     }
 
     /**

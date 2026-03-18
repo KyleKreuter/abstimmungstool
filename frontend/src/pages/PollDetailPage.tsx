@@ -13,7 +13,7 @@ import ConfirmDialog from "@/components/ConfirmDialog";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import {
   fetchPoll,
-  fetchGroups,
+  fetchAllGroups,
   updatePoll,
   updatePollStatus,
   updatePollNotes,
@@ -82,7 +82,8 @@ export default function PollDetailPage() {
     setData: setPoll,
   } = useAsyncData(() => fetchPoll(pollId), [pollId]);
 
-  const { data: groups } = useAsyncData(fetchGroups);
+  const { data: groupsData } = useAsyncData(() => fetchAllGroups(), []);
+  const groups = groupsData?.content ?? [];
 
   // ── WebSocket for live vote results ────────────────────────
   const [liveResults, setLiveResults] = useState<PollResultResponse | null>(null);
@@ -363,7 +364,7 @@ export default function PollDetailPage() {
       <PollDialog
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
-        groups={groups ?? []}
+        groups={groups}
         poll={poll}
         onSave={async (data) => {
           await handleEditPoll({

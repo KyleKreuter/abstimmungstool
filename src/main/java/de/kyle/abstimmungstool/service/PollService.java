@@ -7,6 +7,8 @@ import de.kyle.abstimmungstool.entity.VoteOption;
 import de.kyle.abstimmungstool.repository.PollRepository;
 import de.kyle.abstimmungstool.repository.VoteRepository;
 import jakarta.persistence.EntityNotFoundException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -144,6 +146,22 @@ public class PollService {
         }
         PollGroup group = pollGroupService.getGroupById(groupId);
         return pollRepository.findByGroup(group);
+    }
+
+    /**
+     * Returns polls in a paginated fashion, optionally filtered by group.
+     *
+     * @param groupId  the group ID to filter by, or null for all polls
+     * @param pageable pagination parameters
+     * @return page of polls
+     */
+    @Transactional(readOnly = true)
+    public Page<Poll> getAllPolls(Long groupId, Pageable pageable) {
+        if (groupId == null) {
+            return pollRepository.findAll(pageable);
+        }
+        PollGroup group = pollGroupService.getGroupById(groupId);
+        return pollRepository.findByGroup(group, pageable);
     }
 
     /**

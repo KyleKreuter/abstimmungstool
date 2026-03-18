@@ -1,12 +1,16 @@
 package de.kyle.abstimmungstool.controller;
 
 import de.kyle.abstimmungstool.dto.CreateGroupRequest;
+import de.kyle.abstimmungstool.dto.PageResponse;
 import de.kyle.abstimmungstool.dto.PollGroupResponse;
 import de.kyle.abstimmungstool.dto.UpdateGroupRequest;
 import de.kyle.abstimmungstool.entity.PollGroup;
 import de.kyle.abstimmungstool.repository.PollRepository;
 import de.kyle.abstimmungstool.repository.VotingCodeRepository;
 import de.kyle.abstimmungstool.service.PollGroupService;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.util.HtmlUtils;
@@ -17,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -50,14 +55,22 @@ public class PollGroupController {
     }
 
     /**
-     * Returns all poll groups with poll count and code count.
+     * Returns poll groups with poll count and code count, paginated.
      */
     @GetMapping
-    public ResponseEntity<List<PollGroupResponse>> getAllGroups() {
-        List<PollGroupResponse> responses = pollGroupService.getAllGroups().stream()
-                .map(this::toResponse)
-                .toList();
-        return ResponseEntity.ok(responses);
+    public ResponseEntity<PageResponse<PollGroupResponse>> getAllGroups(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        Page<PollGroup> groupPage = pollGroupService.getAllGroups(
+                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt")));
+        PageResponse<PollGroupResponse> response = new PageResponse<>(
+                groupPage.getContent().stream().map(this::toResponse).toList(),
+                groupPage.getNumber(),
+                groupPage.getSize(),
+                groupPage.getTotalElements(),
+                groupPage.getTotalPages()
+        );
+        return ResponseEntity.ok(response);
     }
 
     /**
@@ -94,12 +107,14 @@ public class PollGroupController {
     private PollGroupResponse toResponse(PollGroup group) {
         long pollCount = pollRepository.findByGroup(group).size();
         long codeCount = votingCodeRepository.countByGroup(group);
+        long activeCodeCount = votingCodeRepository.countByGroupAndActiveTrue(group);
         return new PollGroupResponse(
                 group.getId(),
                 group.getName(),
                 group.getCreatedAt(),
                 pollCount,
-                codeCount
+                codeCount,
+                activeCodeCount
         );
     }
 }

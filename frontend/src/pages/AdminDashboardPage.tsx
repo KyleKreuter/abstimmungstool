@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -16,9 +16,11 @@ import StatusBadge from "@/components/StatusBadge";
 import GroupDialog from "@/components/GroupDialog";
 import PollDialog from "@/components/PollDialog";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import TablePagination from "@/components/TablePagination";
 import { useAsyncData } from "@/hooks/useAsyncData";
 import {
   fetchGroups,
+  fetchAllGroups,
   fetchPolls,
   createGroup,
   updateGroup,
@@ -29,43 +31,53 @@ import {
 import { formatDate } from "@/lib/format";
 import type { PollGroupResponse, PollResponse } from "@/lib/types";
 
-/**
- * Admin Dashboard page.
- *
- * Displays a tabbed view of all polls (filterable by group) and
- * a groups management section. Provides dialogs for creating new
- * groups and polls.
- */
 export default function AdminDashboardPage() {
   const navigate = useNavigate();
 
-  // ── Data fetching ──────────────────────────────────────────
+  // ── Pagination state ────────────────────────────────────────
+  const [groupsPage, setGroupsPage] = useState(0);
+  const [pollsPage, setPollsPage] = useState(0);
+
+  // ── Tab state ───────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState("all");
+
+  const groupIdFilter =
+    activeTab === "all" ? undefined : Number(activeTab);
+
+  // ── Data fetching ───────────────────────────────────────────
   const {
-    data: groups,
+    data: groupsData,
     loading: groupsLoading,
     error: groupsError,
     refetch: refetchGroups,
-  } = useAsyncData(fetchGroups);
+  } = useAsyncData(() => fetchGroups(groupsPage), [groupsPage]);
 
   const {
-    data: polls,
+    data: allGroupsData,
+    refetch: refetchAllGroups,
+  } = useAsyncData(() => fetchAllGroups(), []);
+
+  const {
+    data: pollsData,
     loading: pollsLoading,
     error: pollsError,
     refetch: refetchPolls,
-  } = useAsyncData(fetchPolls);
+  } = useAsyncData(
+    () => fetchPolls(pollsPage, 20, groupIdFilter),
+    [pollsPage, activeTab]
+  );
 
-  // ── Tab state ──────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState("all");
+  const groups = groupsData?.content ?? [];
+  const allGroups = allGroupsData?.content ?? [];
+  const polls = pollsData?.content ?? [];
 
-  /** Polls filtered by the selected tab */
-  const filteredPolls = useMemo(() => {
-    if (!polls) return [];
-    if (activeTab === "all") return polls;
-    const groupId = Number(activeTab);
-    return polls.filter((p) => p.groupId === groupId);
-  }, [polls, activeTab]);
+  // ── Tab change handler ──────────────────────────────────────
+  function handleTabChange(tab: string) {
+    setActiveTab(tab);
+    setPollsPage(0);
+  }
 
-  // ── Group dialog state ─────────────────────────────────────
+  // ── Group dialog state ──────────────────────────────────────
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<PollGroupResponse | null>(
     null
@@ -73,7 +85,7 @@ export default function AdminDashboardPage() {
 
   const handleCreateGroup = useCallback(
     async (name: string) => {
-      const existing = groups?.find(
+      const existing = allGroups.find(
         (g) => g.name.toLowerCase() === name.toLowerCase()
       );
       if (existing) {
@@ -81,33 +93,37 @@ export default function AdminDashboardPage() {
       }
       await createGroup(name);
       refetchGroups();
+      refetchAllGroups();
       toast.success("Gruppe erstellt");
     },
-    [refetchGroups, groups]
+    [refetchGroups, refetchAllGroups, allGroups]
   );
 
   const handleUpdateGroup = useCallback(
     async (name: string) => {
       if (!editingGroup) return;
-      const existing = groups?.find(
-        (g) => g.name.toLowerCase() === name.toLowerCase() && g.id !== editingGroup.id
+      const existing = allGroups.find(
+        (g) =>
+          g.name.toLowerCase() === name.toLowerCase() &&
+          g.id !== editingGroup.id
       );
       if (existing) {
         throw new Error("Eine Gruppe mit diesem Namen existiert bereits.");
       }
       await updateGroup(editingGroup.id, name);
       refetchGroups();
+      refetchAllGroups();
       refetchPolls();
       toast.success("Gruppe umbenannt");
     },
-    [editingGroup, refetchGroups, refetchPolls, groups]
+    [editingGroup, refetchGroups, refetchAllGroups, refetchPolls, allGroups]
   );
 
   function openEditGroup(group: PollGroupResponse) {
     setEditingGroup(group);
   }
 
-  // ── Delete group state ─────────────────────────────────────
+  // ── Delete group state ──────────────────────────────────────
   const [deletingGroup, setDeletingGroup] =
     useState<PollGroupResponse | null>(null);
 
@@ -116,6 +132,7 @@ export default function AdminDashboardPage() {
     try {
       await deleteGroup(deletingGroup.id);
       refetchGroups();
+      refetchAllGroups();
       refetchPolls();
       toast.success("Gruppe gelöscht");
     } catch (err) {
@@ -126,7 +143,7 @@ export default function AdminDashboardPage() {
     setDeletingGroup(null);
   }
 
-  // ── Delete poll state ─────────────────────────────────────
+  // ── Delete poll state ───────────────────────────────────────
   const [deletingPoll, setDeletingPoll] = useState<PollResponse | null>(null);
 
   async function handleDeletePoll() {
@@ -135,6 +152,7 @@ export default function AdminDashboardPage() {
       await deletePoll(deletingPoll.id);
       refetchPolls();
       refetchGroups();
+      refetchAllGroups();
       toast.success("Abstimmung gelöscht");
     } catch (err) {
       toast.error(
@@ -144,7 +162,7 @@ export default function AdminDashboardPage() {
     setDeletingPoll(null);
   }
 
-  // ── Poll dialog state ──────────────────────────────────────
+  // ── Poll dialog state ───────────────────────────────────────
   const [pollDialogOpen, setPollDialogOpen] = useState(false);
 
   const handleCreatePoll = useCallback(
@@ -155,16 +173,17 @@ export default function AdminDashboardPage() {
       });
       refetchPolls();
       refetchGroups();
+      refetchAllGroups();
       toast.success("Abstimmung erstellt");
     },
-    [refetchPolls, refetchGroups]
+    [refetchPolls, refetchGroups, refetchAllGroups]
   );
 
-  // ── Loading & Error states ─────────────────────────────────
+  // ── Loading & Error states ──────────────────────────────────
   const loading = groupsLoading || pollsLoading;
   const error = groupsError || pollsError;
 
-  if (loading) {
+  if (loading && !groupsData && !pollsData) {
     return (
       <div className="container mx-auto p-6">
         <p className="text-muted-foreground">Laden...</p>
@@ -182,9 +201,8 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-8">
-      {/* ── Header ───────────────────────────────────────────── */}
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
+      {/* ── Header ────────────────────────────────────────────── */}
+      <div className="flex items-center justify-end">
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setGroupDialogOpen(true)}>
             Neue Gruppe
@@ -195,43 +213,56 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* ── Polls section with group tabs ────────────────────── */}
+      {/* ── Polls section with group tabs ─────────────────────── */}
       <section>
         <h2 className="text-lg font-semibold mb-4">Abstimmungen</h2>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="flex-wrap h-auto justify-start">
             <TabsTrigger value="all">Alle</TabsTrigger>
-            {groups?.map((group) => (
+            {allGroups.map((group) => (
               <TabsTrigger key={group.id} value={String(group.id)}>
                 {group.name}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          {/* Single content area shared by all tabs */}
           <TabsContent value={activeTab}>
             <PollsTable
-              polls={filteredPolls}
+              polls={polls}
               onPollClick={(poll) => navigate(`/admin/polls/${poll.id}`)}
               onDelete={setDeletingPoll}
             />
+            {pollsData && (
+              <TablePagination
+                page={pollsData.page}
+                totalPages={pollsData.totalPages}
+                onPageChange={setPollsPage}
+              />
+            )}
           </TabsContent>
         </Tabs>
       </section>
 
-      {/* ── Groups section ───────────────────────────────────── */}
+      {/* ── Groups section ────────────────────────────────────── */}
       <section>
         <h2 className="text-lg font-semibold mb-4">Gruppen</h2>
         <GroupsTable
-          groups={groups ?? []}
+          groups={groups}
           onGroupClick={(group) => navigate(`/admin/groups/${group.id}`)}
           onEdit={openEditGroup}
           onDelete={setDeletingGroup}
         />
+        {groupsData && (
+          <TablePagination
+            page={groupsData.page}
+            totalPages={groupsData.totalPages}
+            onPageChange={setGroupsPage}
+          />
+        )}
       </section>
 
-      {/* ── Dialogs ──────────────────────────────────────────── */}
+      {/* ── Dialogs ───────────────────────────────────────────── */}
       <GroupDialog
         open={groupDialogOpen}
         onOpenChange={setGroupDialogOpen}
@@ -250,7 +281,7 @@ export default function AdminDashboardPage() {
       <PollDialog
         open={pollDialogOpen}
         onOpenChange={setPollDialogOpen}
-        groups={groups ?? []}
+        groups={allGroups}
         onSave={handleCreatePoll}
       />
 
@@ -291,7 +322,6 @@ interface PollsTableProps {
   onDelete: (poll: PollResponse) => void;
 }
 
-/** Table displaying a list of polls */
 function PollsTable({ polls, onPollClick, onDelete }: PollsTableProps) {
   if (polls.length === 0) {
     return (
@@ -353,7 +383,6 @@ interface GroupsTableProps {
   onDelete: (group: PollGroupResponse) => void;
 }
 
-/** Table displaying a list of groups with action buttons */
 function GroupsTable({
   groups,
   onGroupClick,

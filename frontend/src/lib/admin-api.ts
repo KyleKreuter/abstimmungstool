@@ -1,5 +1,6 @@
 import { get, post, put, patch, del } from "./api";
 import type {
+  PageResponse,
   PollGroupResponse,
   PollResponse,
   PollDetailResponse,
@@ -15,9 +16,21 @@ export function createGroup(name: string): Promise<PollGroupResponse> {
   return post<PollGroupResponse>("/api/admin/groups", { name });
 }
 
-/** Fetch all poll groups */
-export function fetchGroups(): Promise<PollGroupResponse[]> {
-  return get<PollGroupResponse[]>("/api/admin/groups");
+/** Fetch poll groups (paginated) */
+export function fetchGroups(
+  page: number = 0,
+  size: number = 20
+): Promise<PageResponse<PollGroupResponse>> {
+  return get<PageResponse<PollGroupResponse>>(
+    `/api/admin/groups?page=${page}&size=${size}`
+  );
+}
+
+/** Fetch all poll groups (non-paginated, for dropdowns) */
+export function fetchAllGroups(): Promise<PageResponse<PollGroupResponse>> {
+  return get<PageResponse<PollGroupResponse>>(
+    `/api/admin/groups?page=0&size=1000`
+  );
 }
 
 /** Fetch a single poll group by ID */
@@ -50,10 +63,20 @@ export function createPoll(
   return post<PollResponse>(`/api/admin/groups/${groupId}/polls`, data);
 }
 
-/** Fetch all polls, optionally filtered by group */
-export function fetchPolls(groupId?: number): Promise<PollResponse[]> {
-  const query = groupId != null ? `?groupId=${groupId}` : "";
-  return get<PollResponse[]>(`/api/admin/polls${query}`);
+/** Fetch polls (paginated), optionally filtered by group */
+export function fetchPolls(
+  page: number = 0,
+  size: number = 20,
+  groupId?: number
+): Promise<PageResponse<PollResponse>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+  });
+  if (groupId != null) {
+    params.set("groupId", String(groupId));
+  }
+  return get<PageResponse<PollResponse>>(`/api/admin/polls?${params}`);
 }
 
 /** Fetch a single poll with full details */
@@ -105,7 +128,32 @@ export function generateCodes(
   );
 }
 
-/** Fetch all voting codes for a group */
-export function fetchCodes(groupId: number): Promise<VotingCodeResponse[]> {
-  return get<VotingCodeResponse[]>(`/api/admin/groups/${groupId}/codes`);
+/** Fetch voting codes for a group (paginated with optional search) */
+export function fetchCodes(
+  groupId: number,
+  page: number = 0,
+  size: number = 20,
+  search?: string
+): Promise<PageResponse<VotingCodeResponse>> {
+  const params = new URLSearchParams({
+    page: String(page),
+    size: String(size),
+  });
+  if (search) {
+    params.set("search", search);
+  }
+  return get<PageResponse<VotingCodeResponse>>(
+    `/api/admin/groups/${groupId}/codes?${params}`
+  );
+}
+
+/** Toggle active state of a voting code */
+export function toggleCodeActive(
+  groupId: number,
+  codeId: number
+): Promise<VotingCodeResponse> {
+  return patch<VotingCodeResponse>(
+    `/api/admin/groups/${groupId}/codes/${codeId}/toggle-active`,
+    {}
+  );
 }
