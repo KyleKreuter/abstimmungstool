@@ -6,6 +6,7 @@ package de.kyle.abstimmungstool.dto;
 public record VotingCodeResponse(
         Long id,
         String code,
-        Long groupId
+        Long groupId,
+        boolean active
 ) {
 }

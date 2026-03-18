@@ -172,6 +172,14 @@ export default function PollDialog({
                   Die Gruppe kann nach der Erstellung nicht geändert werden.
                 </p>
               )}
+              {groupId && (() => {
+                const selectedGroup = groups.find((g) => String(g.id) === groupId);
+                return selectedGroup ? (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedGroup.activeCodeCount} von {selectedGroup.codeCount} Codes aktiv
+                  </p>
+                ) : null;
+              })()}
             </div>
 
             {error && (

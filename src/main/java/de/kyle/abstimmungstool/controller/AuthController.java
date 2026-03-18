@@ -95,6 +95,11 @@ public class AuthController {
                     .body(new AuthResponse(null, "Invalid voting code"));
         }
 
+        if (!votingCode.isActive()) {
+            return ResponseEntity.status(401)
+                    .body(new AuthResponse(null, "Dieser Abstimmungscode wurde deaktiviert"));
+        }
+
         var authorities = List.of(new SimpleGrantedAuthority("ROLE_PARTICIPANT"));
         var authentication = new UsernamePasswordAuthenticationToken(
                 "participant:" + votingCode.getCode(),

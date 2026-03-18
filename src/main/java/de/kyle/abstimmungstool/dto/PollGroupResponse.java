@@ -10,6 +10,7 @@ public record PollGroupResponse(
         String name,
         LocalDateTime createdAt,
         long pollCount,
-        long codeCount
+        long codeCount,
+        long activeCodeCount
 ) {
 }

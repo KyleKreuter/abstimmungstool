@@ -31,6 +31,9 @@ public class VotingCode {
     @Column(nullable = false, unique = true)
     private String code;
 
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    private boolean active = true;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "group_id", nullable = false)
     private PollGroup group;
