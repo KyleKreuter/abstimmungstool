@@ -1,12 +1,15 @@
 package de.kyle.abstimmungstool.dto;
 
+import de.kyle.abstimmungstool.entity.PollType;
+
+import java.util.List;
+
 /**
  * Response DTO for poll voting results.
  */
 public record PollResultResponse(
-        long yesCount,
-        long noCount,
-        long abstainCount,
-        long totalCount
+        PollType type,
+        long totalVoters,
+        List<OptionResultResponse> optionResults
 ) {
 }

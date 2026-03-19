@@ -4,13 +4,14 @@ import de.kyle.abstimmungstool.dto.ChangeStatusRequest;
 import de.kyle.abstimmungstool.dto.CreatePollRequest;
 import de.kyle.abstimmungstool.dto.PageResponse;
 import de.kyle.abstimmungstool.dto.PollDetailResponse;
+import de.kyle.abstimmungstool.dto.PollOptionResponse;
 import de.kyle.abstimmungstool.dto.PollResponse;
 import de.kyle.abstimmungstool.dto.PollResultResponse;
 import de.kyle.abstimmungstool.dto.UpdateNotesRequest;
 import de.kyle.abstimmungstool.dto.UpdatePollRequest;
 import de.kyle.abstimmungstool.entity.Poll;
 import de.kyle.abstimmungstool.entity.PollStatus;
-import de.kyle.abstimmungstool.entity.VoteOption;
+import de.kyle.abstimmungstool.entity.PollType;
 import de.kyle.abstimmungstool.service.PollService;
 import de.kyle.abstimmungstool.service.VoteService;
 import org.springframework.data.domain.Page;
@@ -18,7 +19,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.util.HtmlUtils;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -29,9 +29,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.HtmlUtils;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * REST controller for managing polls (admin endpoints).
@@ -48,29 +48,38 @@ public class PollController {
         this.voteService = voteService;
     }
 
-    /**
-     * Creates a new poll within a group.
-     */
     @PostMapping("/groups/{groupId}/polls")
     public ResponseEntity<PollResponse> createPoll(@PathVariable Long groupId,
                                                    @RequestBody CreatePollRequest request) {
-        Poll poll = pollService.createPoll(groupId, request.title(), request.description());
+        PollType type = request.type() != null
+                ? PollType.valueOf(request.type().toUpperCase())
+                : PollType.SIMPLE;
+
+        Poll poll = pollService.createPoll(
+                groupId,
+                HtmlUtils.htmlEscape(request.title()),
+                request.description() != null ? HtmlUtils.htmlEscape(request.description()) : "",
+                type,
+                request.maxChoices(),
+                request.options() != null
+                        ? request.options().stream()
+                            .map(o -> new de.kyle.abstimmungstool.dto.PollOptionRequest(
+                                    HtmlUtils.htmlEscape(o.label())))
+                            .toList()
+                        : null
+        );
         return ResponseEntity.status(HttpStatus.CREATED).body(toResponse(poll));
     }
 
-    /**
-     * Updates a poll's title and description. Only allowed if the poll is in DRAFT status.
-     */
     @PutMapping("/polls/{id}")
     public ResponseEntity<PollResponse> updatePoll(@PathVariable Long id,
                                                    @RequestBody UpdatePollRequest request) {
-        Poll poll = pollService.updatePoll(id, request.title(), request.description());
+        Poll poll = pollService.updatePoll(id,
+                HtmlUtils.htmlEscape(request.title()),
+                request.description() != null ? HtmlUtils.htmlEscape(request.description()) : "");
         return ResponseEntity.ok(toResponse(poll));
     }
 
-    /**
-     * Changes the status of a poll.
-     */
     @PatchMapping("/polls/{id}/status")
     public ResponseEntity<PollResponse> changeStatus(@PathVariable Long id,
                                                      @RequestBody ChangeStatusRequest request) {
@@ -79,9 +88,6 @@ public class PollController {
         return ResponseEntity.ok(toResponse(poll));
     }
 
-    /**
-     * Updates the notes of a poll.
-     */
     @PutMapping("/polls/{id}/notes")
     public ResponseEntity<PollResponse> updateNotes(@PathVariable Long id,
                                                     @RequestBody UpdateNotesRequest request) {
@@ -89,9 +95,6 @@ public class PollController {
         return ResponseEntity.ok(toResponse(poll));
     }
 
-    /**
-     * Returns all polls, optionally filtered by group ID, paginated.
-     */
     @GetMapping("/polls")
     public ResponseEntity<PageResponse<PollResponse>> getAllPolls(
             @RequestParam(required = false) Long groupId,
@@ -109,50 +112,38 @@ public class PollController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * Deletes a PUBLISHED poll and all associated votes.
-     */
     @DeleteMapping("/polls/{id}")
     public ResponseEntity<Void> deletePoll(@PathVariable Long id) {
         pollService.deletePoll(id);
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * Returns a single poll with detailed information including results for OPEN, CLOSED and PUBLISHED polls.
-     */
     @GetMapping("/polls/{id}")
     public ResponseEntity<PollDetailResponse> getPoll(@PathVariable Long id) {
         Poll poll = pollService.getPollById(id);
         PollResultResponse results = null;
 
         if (poll.getStatus() != PollStatus.DRAFT) {
-            Map<VoteOption, Long> voteCounts = voteService.countVotes(id);
-            long yesCount = voteCounts.getOrDefault(VoteOption.YES, 0L);
-            long noCount = voteCounts.getOrDefault(VoteOption.NO, 0L);
-            long abstainCount = voteCounts.getOrDefault(VoteOption.ABSTAIN, 0L);
-            long totalCount = yesCount + noCount + abstainCount;
-            results = new PollResultResponse(yesCount, noCount, abstainCount, totalCount);
+            results = voteService.countVotes(id);
         }
 
-        PollDetailResponse response = new PollDetailResponse(
+        return ResponseEntity.ok(new PollDetailResponse(
                 poll.getId(),
                 poll.getTitle(),
                 poll.getDescription(),
                 poll.getNotes(),
                 poll.getStatus(),
+                poll.getType(),
+                poll.getMaxChoices(),
+                toOptionResponses(poll),
                 poll.getGroup().getId(),
                 poll.getGroup().getName(),
                 results,
                 poll.getCreatedAt(),
                 poll.getUpdatedAt()
-        );
-        return ResponseEntity.ok(response);
+        ));
     }
 
-    /**
-     * Converts a Poll entity to a PollResponse DTO.
-     */
     private PollResponse toResponse(Poll poll) {
         return new PollResponse(
                 poll.getId(),
@@ -160,10 +151,19 @@ public class PollController {
                 poll.getDescription(),
                 poll.getNotes(),
                 poll.getStatus(),
+                poll.getType(),
+                poll.getMaxChoices(),
+                toOptionResponses(poll),
                 poll.getGroup().getId(),
                 poll.getGroup().getName(),
                 poll.getCreatedAt(),
                 poll.getUpdatedAt()
         );
+    }
+
+    private List<PollOptionResponse> toOptionResponses(Poll poll) {
+        return poll.getOptions().stream()
+                .map(o -> new PollOptionResponse(o.getId(), o.getLabel(), o.getOptionKey(), o.getSortOrder()))
+                .toList();
     }
 }

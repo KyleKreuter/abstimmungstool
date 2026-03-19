@@ -58,7 +58,13 @@ export function deleteGroup(id: number): Promise<void> {
 /** Create a new poll within a group */
 export function createPoll(
   groupId: number,
-  data: { title: string; description: string }
+  data: {
+    title: string;
+    description: string;
+    type?: string;
+    maxChoices?: number | null;
+    options?: { label: string }[] | null;
+  }
 ): Promise<PollResponse> {
   return post<PollResponse>(`/api/admin/groups/${groupId}/polls`, data);
 }

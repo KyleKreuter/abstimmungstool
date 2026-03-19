@@ -31,10 +31,12 @@ import type {
   PollResultResponse,
 } from "@/lib/types";
 
-/**
- * Configuration for status transition actions.
- * Each entry maps the current status to the next status with labels.
- */
+const POLL_TYPE_LABELS = {
+  SIMPLE: "Einfache Abstimmung",
+  PERSON_ELECTION: "Personenwahl",
+  MULTI_VOTE: "Mehrfachauswahl",
+};
+
 const STATUS_TRANSITIONS: Partial<
   Record<
     PollStatus,
@@ -64,16 +66,11 @@ const STATUS_TRANSITIONS: Partial<
   },
 };
 
-/**
- * Poll detail page showing all poll information, admin notes,
- * status transition controls, and results when published.
- */
 export default function PollDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const pollId = Number(id);
 
-  // ── Data fetching ──────────────────────────────────────────
   const {
     data: poll,
     loading,
@@ -89,7 +86,6 @@ export default function PollDetailPage() {
   const [liveResults, setLiveResults] = useState<PollResultResponse | null>(null);
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
 
-  // Initialize live results from poll data
   useEffect(() => {
     if (poll?.results) {
       setLiveResults(poll.results);
@@ -102,23 +98,13 @@ export default function PollDetailPage() {
     function setupSubscription() {
       try {
         subscriptionRef.current = subscribePollVotes(pollId, (event: PollVoteEvent) => {
-          setLiveResults({
-            yesCount: event.yesCount,
-            noCount: event.noCount,
-            abstainCount: event.abstainCount,
-            totalCount: event.totalVotes,
-          });
+          setLiveResults(event.results);
         });
       } catch {
         connect(() => {
           try {
             subscriptionRef.current = subscribePollVotes(pollId, (event: PollVoteEvent) => {
-              setLiveResults({
-                yesCount: event.yesCount,
-                noCount: event.noCount,
-                abstainCount: event.abstainCount,
-                totalCount: event.totalVotes,
-              });
+              setLiveResults(event.results);
             });
           } catch {
             // ignore
@@ -144,7 +130,6 @@ export default function PollDetailPage() {
   const [notesSaving, setNotesSaving] = useState(false);
   const notesInitialized = useRef(false);
 
-  // Sync notes from poll data on load
   useEffect(() => {
     if (poll && !notesInitialized.current) {
       setNotes(poll.notes ?? "");
@@ -152,7 +137,6 @@ export default function PollDetailPage() {
     }
   }, [poll]);
 
-  // Reset on ID change
   useEffect(() => {
     notesInitialized.current = false;
   }, [pollId]);
@@ -206,7 +190,7 @@ export default function PollDetailPage() {
     setStatusConfirmOpen(false);
   }
 
-  // ── Delete poll ──────────────────────────────────────────
+  // ── Delete poll ────────────────────────────────────────────
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   async function handleDeletePoll() {
@@ -222,7 +206,6 @@ export default function PollDetailPage() {
     setDeleteConfirmOpen(false);
   }
 
-  // ── Loading & Error ────────────────────────────────────────
   if (loading) {
     return (
       <div className="container mx-auto p-6">
@@ -260,7 +243,7 @@ export default function PollDetailPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* ── Header ───────────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <Button
@@ -271,8 +254,9 @@ export default function PollDetailPage() {
             &larr; Dashboard
           </Button>
           <h1 className="text-2xl font-bold">{poll.title}</h1>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
             <StatusBadge status={poll.status} />
+            <Badge label={POLL_TYPE_LABELS[poll.type]} />
             <span>
               Gruppe:{" "}
               <Link
@@ -312,7 +296,7 @@ export default function PollDetailPage() {
         </div>
       </div>
 
-      {/* ── Description ──────────────────────────────────────── */}
+      {/* Description */}
       {poll.description && (
         <Card>
           <CardHeader>
@@ -324,7 +308,30 @@ export default function PollDetailPage() {
         </Card>
       )}
 
-      {/* ── Results (OPEN, CLOSED, PUBLISHED) ─────────────────── */}
+      {/* Options (for non-SIMPLE in DRAFT) */}
+      {poll.type !== "SIMPLE" && poll.status === "DRAFT" && poll.options.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">
+              {poll.type === "PERSON_ELECTION" ? "Kandidaten" : "Optionen"}
+              {poll.type === "MULTI_VOTE" && poll.maxChoices && (
+                <span className="text-sm font-normal text-muted-foreground ml-2">
+                  (max. {poll.maxChoices} wählbar)
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="list-disc list-inside space-y-1">
+              {poll.options.map((o) => (
+                <li key={o.id} className="text-sm">{o.label}</li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Results */}
       {displayResults && (
         <Card>
           <CardHeader>
@@ -338,7 +345,7 @@ export default function PollDetailPage() {
 
       <Separator />
 
-      {/* ── Admin Notes ──────────────────────────────────────── */}
+      {/* Admin Notes */}
       <div className="space-y-3">
         <Label htmlFor="admin-notes" className="text-base font-semibold">
           Admin-Notizen
@@ -360,7 +367,7 @@ export default function PollDetailPage() {
         </Button>
       </div>
 
-      {/* ── Dialogs ──────────────────────────────────────────── */}
+      {/* Dialogs */}
       <PollDialog
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
@@ -402,27 +409,39 @@ export default function PollDetailPage() {
 // Sub-components
 // ================================================================
 
+function Badge({ label }: { label: string }) {
+  return (
+    <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium">
+      {label}
+    </span>
+  );
+}
+
 interface ResultsDisplayProps {
   results: PollResultResponse;
 }
 
-/**
- * Displays poll results as a summary grid with vote counts and percentages.
- */
 function ResultsDisplay({ results }: ResultsDisplayProps) {
-  const { yesCount, noCount, abstainCount, totalCount } = results;
+  const { totalVoters, optionResults } = results;
 
   function percent(count: number): string {
-    if (totalCount === 0) return "0";
-    return ((count / totalCount) * 100).toFixed(1);
+    if (totalVoters === 0) return "0";
+    return ((count / totalVoters) * 100).toFixed(1);
   }
 
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-      <ResultCard label="Ja" count={yesCount} percentage={percent(yesCount)} color="text-foreground" />
-      <ResultCard label="Nein" count={noCount} percentage={percent(noCount)} color="text-foreground" />
-      <ResultCard label="Enthaltung" count={abstainCount} percentage={percent(abstainCount)} color="text-foreground" />
-      <ResultCard label="Gesamt" count={totalCount} percentage="" color="text-foreground" />
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {optionResults.map((opt) => (
+          <ResultCard
+            key={opt.optionId}
+            label={opt.label}
+            count={opt.count}
+            percentage={percent(opt.count)}
+          />
+        ))}
+        <ResultCard label="Gesamt" count={totalVoters} percentage="" />
+      </div>
     </div>
   );
 }
@@ -431,14 +450,13 @@ interface ResultCardProps {
   label: string;
   count: number;
   percentage: string;
-  color: string;
 }
 
-function ResultCard({ label, count, percentage, color }: ResultCardProps) {
+function ResultCard({ label, count, percentage }: ResultCardProps) {
   return (
     <div className="rounded-lg border p-3 text-center">
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className={`text-2xl font-bold ${color}`}>{count}</p>
+      <p className="text-2xl font-bold">{count}</p>
       {percentage && (
         <p className="text-xs text-muted-foreground">{percentage}%</p>
       )}

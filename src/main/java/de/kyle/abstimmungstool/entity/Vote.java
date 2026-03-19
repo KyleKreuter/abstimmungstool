@@ -2,8 +2,6 @@ package de.kyle.abstimmungstool.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -20,11 +18,12 @@ import java.time.LocalDateTime;
 
 /**
  * Represents a single vote cast by a voting code on a poll.
- * The unique constraint on (poll, voting_code) prevents double voting.
+ * Each vote references a PollOption. The unique constraint on
+ * (poll, voting_code, poll_option) prevents duplicate votes on the same option.
  */
 @Entity
 @Table(name = "votes", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"poll_id", "voting_code_id"})
+        @UniqueConstraint(columnNames = {"poll_id", "voting_code_id", "poll_option_id"})
 })
 @Getter
 @Setter
@@ -43,9 +42,9 @@ public class Vote {
     @JoinColumn(name = "voting_code_id", nullable = false)
     private VotingCode votingCode;
 
-    @Enumerated(EnumType.STRING)
-    @Column(name = "`option`", nullable = false)
-    private VoteOption option;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "poll_option_id", nullable = false)
+    private PollOption pollOption;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime votedAt;

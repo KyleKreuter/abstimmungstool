@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { get, ApiError } from "@/lib/api";
-import type { VoteOption, VoteResponse } from "@/lib/types";
+import type { VoteResponse } from "@/lib/types";
 import {
   Table,
   TableBody,
@@ -12,23 +12,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-/** Map vote option to German label */
-const VOTE_LABELS: Record<VoteOption, string> = {
-  YES: "Ja",
-  NO: "Nein",
-  ABSTAIN: "Enthaltung",
-};
-
-/** Map vote option to badge variant */
-const VOTE_BADGE_VARIANT: Record<VoteOption, "default" | "secondary" | "outline"> = {
-  YES: "default",
-  NO: "secondary",
-  ABSTAIN: "outline",
-};
-
-/**
- * Format an ISO date string to a localized German date/time string.
- */
 function formatDateTime(isoString: string): string {
   const date = new Date(isoString);
   return date.toLocaleString("de-DE", {
@@ -97,11 +80,22 @@ export default function MyVotesPage() {
     );
   }
 
+  // Group votes by pollId for multi-vote display
+  const groupedVotes = votes.reduce<Record<number, VoteResponse[]>>(
+    (acc, vote) => {
+      (acc[vote.pollId] ??= []).push(vote);
+      return acc;
+    },
+    {}
+  );
+
+  const pollEntries = Object.values(groupedVotes);
+
   return (
     <div className="container mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">Meine Stimmen</h1>
 
-      {votes.length === 0 ? (
+      {pollEntries.length === 0 ? (
         <Alert>
           <AlertDescription>
             Du hast noch an keiner Abstimmung teilgenommen.
@@ -117,18 +111,22 @@ export default function MyVotesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {votes.map((vote) => (
-              <TableRow key={vote.pollId}>
+            {pollEntries.map((pollVotes) => (
+              <TableRow key={pollVotes[0].pollId}>
                 <TableCell className="font-medium">
-                  {vote.pollTitle}
+                  {pollVotes[0].pollTitle}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={VOTE_BADGE_VARIANT[vote.option]}>
-                    {VOTE_LABELS[vote.option]}
-                  </Badge>
+                  <div className="flex gap-1 flex-wrap">
+                    {pollVotes.map((v) => (
+                      <Badge key={v.optionId} variant="outline">
+                        {v.optionLabel}
+                      </Badge>
+                    ))}
+                  </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {formatDateTime(vote.votedAt)}
+                  {formatDateTime(pollVotes[0].votedAt)}
                 </TableCell>
               </TableRow>
             ))}

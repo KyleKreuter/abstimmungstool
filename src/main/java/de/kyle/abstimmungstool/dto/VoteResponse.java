@@ -1,7 +1,5 @@
 package de.kyle.abstimmungstool.dto;
 
-import de.kyle.abstimmungstool.entity.VoteOption;
-
 import java.time.LocalDateTime;
 
 /**
@@ -10,7 +8,8 @@ import java.time.LocalDateTime;
 public record VoteResponse(
         Long pollId,
         String pollTitle,
-        VoteOption option,
+        Long optionId,
+        String optionLabel,
         LocalDateTime votedAt
 ) {
 }

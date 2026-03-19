@@ -9,8 +9,6 @@ import {
 } from "@/lib/websocket";
 import type {
   ParticipantPollResponse,
-  VoteOption,
-  VoteResponse,
   PollStatusEvent,
 } from "@/lib/types";
 import {
@@ -35,37 +33,21 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-/** Map vote option to German label */
-const VOTE_LABELS: Record<VoteOption, string> = {
-  YES: "Ja",
-  NO: "Nein",
-  ABSTAIN: "Enthaltung",
-};
-
-/** Map vote option to badge variant */
-const VOTE_BADGE_VARIANT: Record<VoteOption, "default" | "secondary" | "outline"> = {
-  YES: "default",
-  NO: "secondary",
-  ABSTAIN: "outline",
-};
-
 export default function ParticipantDashboardPage() {
   const [polls, setPolls] = useState<ParticipantPollResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Confirmation dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
     pollId: number;
     pollTitle: string;
-    option: VoteOption;
+    optionIds: number[];
+    optionLabels: string[];
     isChange: boolean;
-  }>({ open: false, pollId: 0, pollTitle: "", option: "YES", isChange: false });
+  }>({ open: false, pollId: 0, pollTitle: "", optionIds: [], optionLabels: [], isChange: false });
 
   const [submitting, setSubmitting] = useState(false);
-
-  // Track if component is mounted for cleanup
   const mountedRef = useRef(true);
 
   const fetchPolls = useCallback(async () => {
@@ -90,17 +72,13 @@ export default function ParticipantDashboardPage() {
     }
   }, []);
 
-  // Initial load and WebSocket setup
   useEffect(() => {
     mountedRef.current = true;
-
     fetchPolls();
 
-    // Connect to WebSocket and subscribe to poll status changes
     connect(
       () => {
         subscribePollStatus((event: PollStatusEvent) => {
-          // Show toast notification based on status change
           switch (event.status) {
             case "OPEN":
               toast.info("Neue Abstimmung verfügbar");
@@ -112,7 +90,6 @@ export default function ParticipantDashboardPage() {
               toast.success("Ergebnis wurde veröffentlicht");
               break;
           }
-          // Update local state immediately for instant UI feedback
           setPolls((prev) =>
             prev.map((p) =>
               p.id === event.pollId
@@ -120,7 +97,6 @@ export default function ParticipantDashboardPage() {
                 : p
             )
           );
-          // Also refetch after delay (transaction may not be committed yet)
           setTimeout(() => void fetchPolls(), 500);
         });
       },
@@ -135,38 +111,38 @@ export default function ParticipantDashboardPage() {
     };
   }, [fetchPolls]);
 
-  /**
-   * Open the confirmation dialog before casting or changing a vote.
-   */
-  function handleVoteClick(poll: ParticipantPollResponse, option: VoteOption) {
+  function handleVoteSubmit(
+    poll: ParticipantPollResponse,
+    optionIds: number[],
+    optionLabels: string[]
+  ) {
     setConfirmDialog({
       open: true,
       pollId: poll.id,
       pollTitle: poll.title,
-      option,
-      isChange: poll.myVote !== null,
+      optionIds,
+      optionLabels,
+      isChange: poll.myVoteOptionIds !== null,
     });
   }
 
-  /**
-   * Submit the vote after user confirms.
-   */
   async function handleVoteConfirm() {
-    const { pollId, option, isChange } = confirmDialog;
+    const { pollId, optionIds, isChange } = confirmDialog;
     setSubmitting(true);
 
     try {
       if (isChange) {
-        await put<VoteResponse>(`/api/polls/${pollId}/vote`, { option });
+        await put(`/api/polls/${pollId}/vote`, { optionIds });
         toast.success("Stimme geändert");
       } else {
-        await post<VoteResponse>(`/api/polls/${pollId}/vote`, { option });
+        await post(`/api/polls/${pollId}/vote`, { optionIds });
         toast.success("Stimme abgegeben");
       }
 
-      // Update the local poll state
       setPolls((prev) =>
-        prev.map((p) => (p.id === pollId ? { ...p, myVote: option } : p))
+        prev.map((p) =>
+          p.id === pollId ? { ...p, myVoteOptionIds: optionIds } : p
+        )
       );
     } catch (err) {
       const message =
@@ -218,7 +194,7 @@ export default function ParticipantDashboardPage() {
                 <PollCard
                   key={poll.id}
                   poll={poll}
-                  onVote={handleVoteClick}
+                  onVoteSubmit={handleVoteSubmit}
                 />
               ))}
             </div>
@@ -226,7 +202,6 @@ export default function ParticipantDashboardPage() {
         </div>
       </div>
 
-      {/* Confirmation Dialog */}
       <AlertDialog
         open={confirmDialog.open}
         onOpenChange={(open) =>
@@ -238,7 +213,7 @@ export default function ParticipantDashboardPage() {
             <AlertDialogTitle>Abstimmung bestätigen</AlertDialogTitle>
             <AlertDialogDescription>
               Möchtest du bei &quot;{confirmDialog.pollTitle}&quot; mit{" "}
-              <strong>{VOTE_LABELS[confirmDialog.option]}</strong> abstimmen?
+              <strong>{confirmDialog.optionLabels.join(", ")}</strong> abstimmen?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -264,17 +239,20 @@ export default function ParticipantDashboardPage() {
 
 interface PollCardProps {
   poll: ParticipantPollResponse;
-  onVote: (poll: ParticipantPollResponse, option: VoteOption) => void;
+  onVoteSubmit: (
+    poll: ParticipantPollResponse,
+    optionIds: number[],
+    optionLabels: string[]
+  ) => void;
 }
 
-function PollCard({ poll, onVote }: PollCardProps) {
+function PollCard({ poll, onVoteSubmit }: PollCardProps) {
   const isOpen = poll.status === "OPEN";
   const isClosed = poll.status === "CLOSED";
   const isPublished = poll.status === "PUBLISHED";
 
-  /** Truncate description to ~120 characters */
   const truncatedDescription =
-    poll.description.length > 120
+    poll.description && poll.description.length > 120
       ? poll.description.slice(0, 120) + "..."
       : poll.description;
 
@@ -286,9 +264,7 @@ function PollCard({ poll, onVote }: PollCardProps) {
       <CardHeader>
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-lg">{poll.title}</CardTitle>
-          <Badge variant={badgeVariant}>
-            {statusLabel}
-          </Badge>
+          <Badge variant={badgeVariant}>{statusLabel}</Badge>
         </div>
         {truncatedDescription && (
           <CardDescription>{truncatedDescription}</CardDescription>
@@ -296,35 +272,26 @@ function PollCard({ poll, onVote }: PollCardProps) {
       </CardHeader>
 
       <CardContent>
-        {/* Show current vote badge if voted */}
-        {poll.myVote && (
+        {poll.myVoteOptionIds && poll.myVoteOptionIds.length > 0 && (
           <div className="mb-3">
             <span className="text-sm text-muted-foreground mr-2">
               Deine Stimme:
             </span>
-            <Badge variant={VOTE_BADGE_VARIANT[poll.myVote]}>
-              {VOTE_LABELS[poll.myVote]}
-            </Badge>
+            {poll.myVoteOptionIds.map((optId) => {
+              const opt = poll.options.find((o) => o.id === optId);
+              return (
+                <Badge key={optId} variant="outline" className="mr-1">
+                  {opt?.label ?? "?"}
+                </Badge>
+              );
+            })}
           </div>
         )}
 
-        {/* Voting buttons for OPEN polls */}
         {isOpen && (
-          <div className="flex gap-2">
-            {(["YES", "NO", "ABSTAIN"] as VoteOption[]).map((option) => (
-              <Button
-                key={option}
-                variant={poll.myVote === option ? "default" : "outline"}
-                size="sm"
-                onClick={() => onVote(poll, option)}
-              >
-                {VOTE_LABELS[option]}
-              </Button>
-            ))}
-          </div>
+          <VotingControls poll={poll} onVoteSubmit={onVoteSubmit} />
         )}
 
-        {/* Waiting message for CLOSED polls */}
         {isClosed && (
           <p className="text-sm text-muted-foreground">
             Warten auf Ergebnisse...
@@ -332,7 +299,6 @@ function PollCard({ poll, onVote }: PollCardProps) {
         )}
       </CardContent>
 
-      {/* Link to results for PUBLISHED polls */}
       {isPublished && (
         <CardFooter>
           <Button asChild variant="outline" size="sm">
@@ -341,5 +307,146 @@ function PollCard({ poll, onVote }: PollCardProps) {
         </CardFooter>
       )}
     </Card>
+  );
+}
+
+// ============================================================
+// Voting Controls (per poll type)
+// ============================================================
+
+interface VotingControlsProps {
+  poll: ParticipantPollResponse;
+  onVoteSubmit: (
+    poll: ParticipantPollResponse,
+    optionIds: number[],
+    optionLabels: string[]
+  ) => void;
+}
+
+function VotingControls({ poll, onVoteSubmit }: VotingControlsProps) {
+  if (poll.type === "SIMPLE") {
+    return <SimpleVoting poll={poll} onVoteSubmit={onVoteSubmit} />;
+  }
+  if (poll.type === "PERSON_ELECTION") {
+    return <PersonElectionVoting poll={poll} onVoteSubmit={onVoteSubmit} />;
+  }
+  return <MultiVoting poll={poll} onVoteSubmit={onVoteSubmit} />;
+}
+
+function SimpleVoting({ poll, onVoteSubmit }: VotingControlsProps) {
+  return (
+    <div className="flex gap-2">
+      {poll.options.map((option) => (
+        <Button
+          key={option.id}
+          variant={
+            poll.myVoteOptionIds?.includes(option.id) ? "default" : "outline"
+          }
+          size="sm"
+          onClick={() =>
+            onVoteSubmit(poll, [option.id], [option.label])
+          }
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function PersonElectionVoting({ poll, onVoteSubmit }: VotingControlsProps) {
+  const [selected, setSelected] = useState<number | null>(
+    poll.myVoteOptionIds?.[0] ?? null
+  );
+
+  function handleSubmit() {
+    if (selected === null) return;
+    const opt = poll.options.find((o) => o.id === selected);
+    onVoteSubmit(poll, [selected], [opt?.label ?? "?"]);
+  }
+
+  return (
+    <div className="space-y-2">
+      {poll.options.map((option) => (
+        <label
+          key={option.id}
+          className="flex items-center gap-2 cursor-pointer rounded-md border p-2 hover:bg-muted/50 transition-colors"
+        >
+          <input
+            type="radio"
+            name={`poll-${poll.id}`}
+            checked={selected === option.id}
+            onChange={() => setSelected(option.id)}
+            className="accent-primary"
+          />
+          <span className="text-sm">{option.label}</span>
+        </label>
+      ))}
+      <Button
+        size="sm"
+        onClick={handleSubmit}
+        disabled={selected === null}
+      >
+        Abstimmen
+      </Button>
+    </div>
+  );
+}
+
+function MultiVoting({ poll, onVoteSubmit }: VotingControlsProps) {
+  const [selected, setSelected] = useState<Set<number>>(
+    new Set(poll.myVoteOptionIds ?? [])
+  );
+  const max = poll.maxChoices ?? 1;
+
+  function toggle(optionId: number) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(optionId)) {
+        next.delete(optionId);
+      } else if (next.size < max) {
+        next.add(optionId);
+      }
+      return next;
+    });
+  }
+
+  function handleSubmit() {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    const labels = ids.map(
+      (id) => poll.options.find((o) => o.id === id)?.label ?? "?"
+    );
+    onVoteSubmit(poll, ids, labels);
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">
+        Wähle bis zu {max} {max === 1 ? "Option" : "Optionen"} ({selected.size}/{max})
+      </p>
+      {poll.options.map((option) => (
+        <label
+          key={option.id}
+          className="flex items-center gap-2 cursor-pointer rounded-md border p-2 hover:bg-muted/50 transition-colors"
+        >
+          <input
+            type="checkbox"
+            checked={selected.has(option.id)}
+            onChange={() => toggle(option.id)}
+            disabled={!selected.has(option.id) && selected.size >= max}
+            className="accent-primary"
+          />
+          <span className="text-sm">{option.label}</span>
+        </label>
+      ))}
+      <Button
+        size="sm"
+        onClick={handleSubmit}
+        disabled={selected.size === 0}
+      >
+        Abstimmen
+      </Button>
+    </div>
   );
 }

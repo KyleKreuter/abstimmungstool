@@ -15,18 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 
-/**
- * Calculate the percentage of a count relative to a total.
- * Returns 0 if total is 0 to avoid division by zero.
- */
 function percentage(count: number, total: number): number {
   if (total === 0) return 0;
   return Math.round((count / total) * 100);
 }
 
-/**
- * A single horizontal bar in the result chart.
- */
 function ResultBar({
   label,
   count,
@@ -41,12 +34,11 @@ function ResultBar({
   color: string;
 }) {
   const pct = percentage(count, total);
-  // Width proportional to the maximum count (so the largest bar fills 100%)
   const widthPct = maxCount === 0 ? 0 : (count / maxCount) * 100;
 
   return (
     <div className="flex items-center gap-3">
-      <span className="w-24 text-sm font-medium text-right shrink-0">
+      <span className="w-28 text-sm font-medium text-right shrink-0">
         {label}
       </span>
       <div className="flex-1 h-8 bg-muted rounded overflow-hidden">
@@ -66,6 +58,8 @@ function ResultBar({
   );
 }
 
+const BAR_COLORS = ["#333", "#666", "#888", "#aaa", "#bbb", "#ccc", "#ddd"];
+
 export default function PollResultsPage() {
   const { id } = useParams<{ id: string }>();
   const pollId = Number(id);
@@ -80,12 +74,10 @@ export default function PollResultsPage() {
 
     async function fetchData() {
       try {
-        // Fetch poll details and results in parallel
         const [pollData, resultData] = await Promise.all([
           get<ParticipantPollResponse>(`/api/polls/${pollId}`),
           get<PollResultResponse>(`/api/polls/${pollId}/results`).catch(
             (err) => {
-              // Results may not be available if not PUBLISHED
               if (err instanceof ApiError && err.status === 403) {
                 return null;
               }
@@ -144,7 +136,6 @@ export default function PollResultsPage() {
     );
   }
 
-  // Poll loaded but not PUBLISHED - show info message
   if (poll && poll.status !== "PUBLISHED") {
     return (
       <div className="container mx-auto p-6">
@@ -163,7 +154,6 @@ export default function PollResultsPage() {
     );
   }
 
-  // Results not available (shouldn't normally happen if status is PUBLISHED)
   if (!results || !poll) {
     return (
       <div className="container mx-auto p-6">
@@ -182,9 +172,7 @@ export default function PollResultsPage() {
   }
 
   const maxCount = Math.max(
-    results.yesCount,
-    results.noCount,
-    results.abstainCount,
+    ...results.optionResults.map((o) => o.count),
     1
   );
 
@@ -201,33 +189,22 @@ export default function PollResultsPage() {
           <div className="flex items-start justify-between gap-2">
             <CardTitle className="text-xl">{poll.title}</CardTitle>
             <Badge variant="secondary">
-              {results.totalCount} {results.totalCount === 1 ? "Stimme" : "Stimmen"}
+              {results.totalVoters} {results.totalVoters === 1 ? "Stimme" : "Stimmen"}
             </Badge>
           </div>
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <ResultBar
-            label="Ja"
-            count={results.yesCount}
-            total={results.totalCount}
-            maxCount={maxCount}
-            color="#333"
-          />
-          <ResultBar
-            label="Nein"
-            count={results.noCount}
-            total={results.totalCount}
-            maxCount={maxCount}
-            color="#888"
-          />
-          <ResultBar
-            label="Enthaltung"
-            count={results.abstainCount}
-            total={results.totalCount}
-            maxCount={maxCount}
-            color="#ccc"
-          />
+          {results.optionResults.map((opt, index) => (
+            <ResultBar
+              key={opt.optionId}
+              label={opt.label}
+              count={opt.count}
+              total={results.totalVoters}
+              maxCount={maxCount}
+              color={BAR_COLORS[index % BAR_COLORS.length]}
+            />
+          ))}
         </CardContent>
       </Card>
     </div>

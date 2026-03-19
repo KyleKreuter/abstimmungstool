@@ -166,10 +166,20 @@ export default function AdminDashboardPage() {
   const [pollDialogOpen, setPollDialogOpen] = useState(false);
 
   const handleCreatePoll = useCallback(
-    async (data: { title: string; description: string; groupId: number }) => {
+    async (data: {
+      title: string;
+      description: string;
+      groupId: number;
+      type: string;
+      maxChoices: number | null;
+      options: { label: string }[] | null;
+    }) => {
       await createPoll(data.groupId, {
         title: data.title,
         description: data.description,
+        type: data.type,
+        maxChoices: data.maxChoices,
+        options: data.options,
       });
       refetchPolls();
       refetchGroups();

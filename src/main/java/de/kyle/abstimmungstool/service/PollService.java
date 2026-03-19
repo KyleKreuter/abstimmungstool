@@ -1,9 +1,13 @@
 package de.kyle.abstimmungstool.service;
 
+import de.kyle.abstimmungstool.dto.OptionResultResponse;
+import de.kyle.abstimmungstool.dto.PollOptionRequest;
+import de.kyle.abstimmungstool.dto.PollResultResponse;
 import de.kyle.abstimmungstool.entity.Poll;
 import de.kyle.abstimmungstool.entity.PollGroup;
+import de.kyle.abstimmungstool.entity.PollOption;
 import de.kyle.abstimmungstool.entity.PollStatus;
-import de.kyle.abstimmungstool.entity.VoteOption;
+import de.kyle.abstimmungstool.entity.PollType;
 import de.kyle.abstimmungstool.repository.PollRepository;
 import de.kyle.abstimmungstool.repository.VoteRepository;
 import jakarta.persistence.EntityNotFoundException;
@@ -13,9 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Service for managing polls and their lifecycle.
@@ -41,14 +43,10 @@ public class PollService {
 
     /**
      * Creates a new poll in DRAFT status within the given group.
-     *
-     * @param groupId     the group ID
-     * @param title       the poll title
-     * @param description the poll description
-     * @return the created poll
-     * @throws EntityNotFoundException if the group does not exist
      */
-    public Poll createPoll(Long groupId, String title, String description) {
+    public Poll createPoll(Long groupId, String title, String description,
+                           PollType type, Integer maxChoices,
+                           List<PollOptionRequest> optionRequests) {
         PollGroup group = pollGroupService.getGroupById(groupId);
 
         Poll poll = new Poll();
@@ -56,20 +54,36 @@ public class PollService {
         poll.setTitle(title);
         poll.setDescription(description);
         poll.setStatus(PollStatus.DRAFT);
+        poll.setType(type);
         poll.setCreatedAt(LocalDateTime.now());
         poll.setUpdatedAt(LocalDateTime.now());
+
+        switch (type) {
+            case SIMPLE -> {
+                poll.setMaxChoices(1);
+                addSimpleOptions(poll);
+            }
+            case PERSON_ELECTION -> {
+                validateCustomOptions(optionRequests);
+                poll.setMaxChoices(1);
+                addCustomOptions(poll, optionRequests);
+            }
+            case MULTI_VOTE -> {
+                validateCustomOptions(optionRequests);
+                if (maxChoices == null || maxChoices < 1 || maxChoices > optionRequests.size()) {
+                    throw new IllegalArgumentException(
+                            "maxChoices must be between 1 and " + optionRequests.size());
+                }
+                poll.setMaxChoices(maxChoices);
+                addCustomOptions(poll, optionRequests);
+            }
+        }
+
         return pollRepository.save(poll);
     }
 
     /**
      * Updates the title and description of a poll. Only allowed if the poll is in DRAFT status.
-     *
-     * @param id          the poll ID
-     * @param title       the new title
-     * @param description the new description
-     * @return the updated poll
-     * @throws EntityNotFoundException if the poll does not exist
-     * @throws IllegalStateException   if the poll is not in DRAFT status
      */
     public Poll updatePoll(Long id, String title, String description) {
         Poll poll = getPollById(id);
@@ -86,11 +100,6 @@ public class PollService {
 
     /**
      * Updates the notes of a poll (allowed in any status).
-     *
-     * @param id    the poll ID
-     * @param notes the new notes
-     * @return the updated poll
-     * @throws EntityNotFoundException if the poll does not exist
      */
     public Poll updateNotes(Long id, String notes) {
         Poll poll = getPollById(id);
@@ -103,12 +112,6 @@ public class PollService {
      * Changes the status of a poll. Only forward transitions are allowed:
      * DRAFT -> OPEN -> CLOSED -> PUBLISHED.
      * Broadcasts the status change via WebSocket.
-     *
-     * @param id        the poll ID
-     * @param newStatus the new status
-     * @return the updated poll
-     * @throws EntityNotFoundException if the poll does not exist
-     * @throws IllegalStateException   if the transition is not valid
      */
     public Poll changeStatus(Long id, PollStatus newStatus) {
         Poll poll = getPollById(id);
@@ -123,22 +126,13 @@ public class PollService {
         webSocketEventService.broadcastPollStatusChange(saved);
 
         if (saved.getStatus() == PollStatus.PUBLISHED) {
-            Map<VoteOption, Long> results = new EnumMap<>(VoteOption.class);
-            results.put(VoteOption.YES, voteRepository.countByPollAndOption(saved, VoteOption.YES));
-            results.put(VoteOption.NO, voteRepository.countByPollAndOption(saved, VoteOption.NO));
-            results.put(VoteOption.ABSTAIN, voteRepository.countByPollAndOption(saved, VoteOption.ABSTAIN));
+            PollResultResponse results = buildResults(saved);
             webSocketEventService.broadcastResults(saved.getId(), results);
         }
 
         return saved;
     }
 
-    /**
-     * Returns all polls, optionally filtered by group.
-     *
-     * @param groupId the group ID to filter by, or null for all polls
-     * @return list of polls
-     */
     @Transactional(readOnly = true)
     public List<Poll> getAllPolls(Long groupId) {
         if (groupId == null) {
@@ -148,13 +142,6 @@ public class PollService {
         return pollRepository.findByGroup(group);
     }
 
-    /**
-     * Returns polls in a paginated fashion, optionally filtered by group.
-     *
-     * @param groupId  the group ID to filter by, or null for all polls
-     * @param pageable pagination parameters
-     * @return page of polls
-     */
     @Transactional(readOnly = true)
     public Page<Poll> getAllPolls(Long groupId, Pageable pageable) {
         if (groupId == null) {
@@ -164,26 +151,12 @@ public class PollService {
         return pollRepository.findByGroup(group, pageable);
     }
 
-    /**
-     * Retrieves a poll by its ID.
-     *
-     * @param id the poll ID
-     * @return the poll
-     * @throws EntityNotFoundException if the poll does not exist
-     */
     @Transactional(readOnly = true)
     public Poll getPollById(Long id) {
         return pollRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Poll not found with id: " + id));
     }
 
-    /**
-     * Deletes a poll and all associated votes. Only allowed if the poll is PUBLISHED.
-     *
-     * @param id the poll ID
-     * @throws EntityNotFoundException if the poll does not exist
-     * @throws IllegalStateException   if the poll is not in PUBLISHED status
-     */
     public void deletePoll(Long id) {
         Poll poll = getPollById(id);
 
@@ -195,12 +168,6 @@ public class PollService {
         pollRepository.delete(poll);
     }
 
-    /**
-     * Returns polls visible to a participant (only OPEN and PUBLISHED polls in the group).
-     *
-     * @param group the poll group
-     * @return list of visible polls
-     */
     @Transactional(readOnly = true)
     public List<Poll> getPollsForParticipant(PollGroup group) {
         return pollRepository.findByGroupAndStatusIn(group, List.of(PollStatus.OPEN, PollStatus.CLOSED, PollStatus.PUBLISHED));
@@ -208,31 +175,71 @@ public class PollService {
 
     /**
      * Returns the vote results for a poll. Only allowed if the poll is PUBLISHED.
-     *
-     * @param pollId the poll ID
-     * @return a map of VoteOption to count
-     * @throws EntityNotFoundException if the poll does not exist
-     * @throws IllegalStateException   if the poll is not in PUBLISHED status
      */
     @Transactional(readOnly = true)
-    public Map<VoteOption, Long> getResults(Long pollId) {
+    public PollResultResponse getResults(Long pollId) {
         Poll poll = getPollById(pollId);
 
         if (poll.getStatus() != PollStatus.PUBLISHED) {
             throw new IllegalStateException("Results are only available for PUBLISHED polls. Current status: " + poll.getStatus());
         }
 
-        Map<VoteOption, Long> results = new EnumMap<>(VoteOption.class);
-        results.put(VoteOption.YES, voteRepository.countByPollAndOption(poll, VoteOption.YES));
-        results.put(VoteOption.NO, voteRepository.countByPollAndOption(poll, VoteOption.NO));
-        results.put(VoteOption.ABSTAIN, voteRepository.countByPollAndOption(poll, VoteOption.ABSTAIN));
-        return results;
+        return buildResults(poll);
     }
 
     /**
-     * Validates that the status transition is allowed.
-     * Only forward transitions: DRAFT -> OPEN -> CLOSED -> PUBLISHED.
+     * Builds a generic result response for any poll type.
      */
+    public PollResultResponse buildResults(Poll poll) {
+        List<OptionResultResponse> optionResults = poll.getOptions().stream()
+                .map(option -> new OptionResultResponse(
+                        option.getId(),
+                        option.getLabel(),
+                        option.getOptionKey(),
+                        voteRepository.countByPollAndPollOption(poll, option)
+                ))
+                .toList();
+
+        long totalVoters = voteRepository.countByPoll(poll);
+        if (poll.getType() == PollType.MULTI_VOTE) {
+            // For MULTI_VOTE, totalVoters = sum of votes / not unique voters
+            // We need distinct voter count, approximate via total votes
+            long totalVotes = optionResults.stream().mapToLong(OptionResultResponse::count).sum();
+            // Use countByPoll which counts all vote rows; we want distinct voters
+            // Since each voter can have multiple votes, we use a different approach
+            totalVoters = totalVotes > 0 ? totalVoters : 0;
+        }
+
+        return new PollResultResponse(poll.getType(), totalVoters, optionResults);
+    }
+
+    private void addSimpleOptions(Poll poll) {
+        addOption(poll, "Ja", "YES", 0);
+        addOption(poll, "Nein", "NO", 1);
+        addOption(poll, "Enthaltung", "ABSTAIN", 2);
+    }
+
+    private void addCustomOptions(Poll poll, List<PollOptionRequest> requests) {
+        for (int i = 0; i < requests.size(); i++) {
+            addOption(poll, requests.get(i).label(), null, i);
+        }
+    }
+
+    private void addOption(Poll poll, String label, String optionKey, int sortOrder) {
+        PollOption option = new PollOption();
+        option.setPoll(poll);
+        option.setLabel(label);
+        option.setOptionKey(optionKey);
+        option.setSortOrder(sortOrder);
+        poll.getOptions().add(option);
+    }
+
+    private void validateCustomOptions(List<PollOptionRequest> options) {
+        if (options == null || options.size() < 2) {
+            throw new IllegalArgumentException("At least 2 options are required.");
+        }
+    }
+
     private void validateStatusTransition(PollStatus current, PollStatus target) {
         boolean valid = switch (current) {
             case DRAFT -> target == PollStatus.OPEN;

@@ -1,8 +1,10 @@
 package de.kyle.abstimmungstool.dto;
 
 import de.kyle.abstimmungstool.entity.PollStatus;
+import de.kyle.abstimmungstool.entity.PollType;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * Response DTO for a poll (without detailed results).
@@ -13,6 +15,9 @@ public record PollResponse(
         String description,
         String notes,
         PollStatus status,
+        PollType type,
+        Integer maxChoices,
+        List<PollOptionResponse> options,
         Long groupId,
         String groupName,
         LocalDateTime createdAt,
