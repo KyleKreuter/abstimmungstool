@@ -5,6 +5,7 @@ import de.kyle.abstimmungstool.dto.AuthResponse;
 import de.kyle.abstimmungstool.dto.VotingCodeLoginRequest;
 import de.kyle.abstimmungstool.entity.VotingCode;
 import de.kyle.abstimmungstool.repository.VotingCodeRepository;
+import de.kyle.abstimmungstool.service.VotingCodeService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -87,12 +88,17 @@ public class AuthController {
     @PostMapping("/participant/login")
     public ResponseEntity<AuthResponse> participantLogin(@RequestBody VotingCodeLoginRequest request,
                                                          HttpSession session) {
+        if (!VotingCodeService.isChecksumValid(request.code())) {
+            return ResponseEntity.status(401)
+                    .body(new AuthResponse(null, "Der eingegebene Code ist ungültig. Bitte überprüfe deine Eingabe."));
+        }
+
         VotingCode votingCode = votingCodeRepository.findByCode(request.code())
                 .orElse(null);
 
         if (votingCode == null) {
             return ResponseEntity.status(401)
-                    .body(new AuthResponse(null, "Invalid voting code"));
+                    .body(new AuthResponse(null, "Der eingegebene Code ist ungültig. Bitte überprüfe deine Eingabe."));
         }
 
         if (!votingCode.isActive()) {

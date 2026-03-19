@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ApiError } from "@/lib/api";
@@ -13,7 +13,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CircleAlert } from "lucide-react";
+
+function mapErrorMessage(err: ApiError): string {
+  return err.message || "Ein Fehler ist aufgetreten. Bitte versuche es erneut.";
+}
 
 export default function LoginPage() {
   const { authenticated, role, loginParticipant, loading } = useAuth();
@@ -22,6 +26,7 @@ export default function LoginPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   // If already authenticated, redirect to the appropriate page
   if (!loading && authenticated) {
@@ -38,6 +43,7 @@ export default function LoginPage() {
     const trimmedCode = code.trim();
     if (!trimmedCode) {
       setError("Bitte gib deinen Teilnahme-Code ein.");
+      inputRef.current?.focus();
       return;
     }
 
@@ -47,10 +53,12 @@ export default function LoginPage() {
       navigate("/polls", { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(err.message || "Anmeldung fehlgeschlagen.");
+        setError(mapErrorMessage(err));
       } else {
         setError("Ein unerwarteter Fehler ist aufgetreten.");
       }
+      inputRef.current?.focus();
+      inputRef.current?.select();
     } finally {
       setSubmitting(false);
     }
@@ -68,24 +76,31 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit}>
           <CardContent className="space-y-4">
-            {error && (
-              <Alert variant="destructive">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
             <div className="space-y-2">
               <Label htmlFor="code">Teilnahme-Code</Label>
               <Input
+                ref={inputRef}
                 id="code"
                 type="text"
                 placeholder="Code eingeben"
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  if (error) setError(null);
+                }}
                 disabled={submitting}
                 autoFocus
                 autoComplete="off"
+                aria-invalid={!!error}
+                aria-describedby={error ? "code-error" : undefined}
+                className={error ? "border-destructive focus-visible:ring-destructive" : ""}
               />
+              {error && (
+                <p id="code-error" className="flex items-center gap-1.5 text-sm text-destructive">
+                  <CircleAlert className="h-4 w-4 shrink-0" />
+                  {error}
+                </p>
+              )}
             </div>
           </CardContent>
 
